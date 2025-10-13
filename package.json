@@ -1,0 +1,18 @@
+{
+  "name": "blockly-procon-client",
+  "module": "src/proxy.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "private": true,
+  "scripts": {
+    "start": "bun run src/proxy.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "socket.io-client": "^2.4.1"
+  }
+}

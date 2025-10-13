@@ -25,6 +25,10 @@ const serverToClientPackets = [
 serverToClientPackets.forEach((p) => socket.on(p, log(p)));
 
 for await (const line of console) {
-  const packet: SocketPacket = JSON.parse(line);
-  socket.emit(packet.packet, packet.data);
+  try {
+    const packet: SocketPacket = JSON.parse(line);
+    socket.emit(packet.packet, packet.data);
+  } catch {
+    break;
+  }
 }

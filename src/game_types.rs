@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::Side;
+use crate::game::Side;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(into = "String")]

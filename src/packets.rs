@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Side,
+    game::Side,
     game_types::{Direction, GameData},
 };
 

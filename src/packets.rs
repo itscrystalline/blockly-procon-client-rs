@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::game_types::{Direction, GameData, Side};
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 #[serde(rename_all = "snake_case", tag = "packet", content = "data")]
 pub enum C2SPacket {
     PlayerJoin { room_id: String, name: String },
@@ -14,6 +15,7 @@ pub enum C2SPacket {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 #[serde(rename_all = "snake_case", tag = "packet", content = "data")]
 pub enum S2CPacket {
     JoinedRoom {

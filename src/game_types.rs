@@ -78,6 +78,7 @@ pub struct GameData {
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
+#[allow(dead_code)]
 pub struct Effect {
     #[serde(rename = "t")]
     search: SearchType,
@@ -96,7 +97,7 @@ impl Map {
         self.0[y][x]
     }
 }
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(into = "String")]
 #[serde(from = "String")]
 pub enum Side {

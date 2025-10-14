@@ -1,4 +1,4 @@
-use egui::{Color32, Rgba, RichText};
+use egui::{Color32, RichText};
 use egui::{FontFamily::Proportional, TextStyle};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -20,8 +20,8 @@ pub fn start_ui(state: Arc<RwLock<GameState>>) {
             let info = state.read();
             (
                 info.room.clone(),
-                info.name.clone(),
-                info.opponent_name.clone(),
+                info.players.us.name.clone(),
+                info.players.opponent.name.clone(),
             )
         };
         let event_loop_builder: Option<EventLoopBuilderHook> =

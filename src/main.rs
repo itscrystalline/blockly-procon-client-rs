@@ -13,11 +13,11 @@ use crate::{
 };
 
 fn main() {
-    let handle = ChaserGame::join("crystal", "Practice2");
+    let handle = ChaserGame::join("crystal", "Practice3");
     loop {
         if !matches!(handle.info().phase, GamePhase::Ended { .. }) {
             handle.send(C2SPacket::MovePlayer(Direction::Top));
         }
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(20));
     }
 }

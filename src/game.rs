@@ -22,15 +22,32 @@ pub enum GamePhase {
 }
 pub struct GameState {
     pub room: String,
-    pub name: String,
-    pub opponent_name: String,
     pub phase: GamePhase,
     pub map: Map,
     pub map_size: (u32, u32),
     pub effect: Option<Effect>,
-    pub score: u32,
-    pub opponent_score: u32,
     pub turns_left: u32,
+    pub players: Players,
+}
+pub struct Players {
+    pub us: Player,
+    pub opponent: Player,
+}
+impl Players {
+    fn assign_scores(&mut self, cool: u32, hot: u32) {
+        if let Side::Cold = self.us.side {
+            self.us.score = cool;
+            self.opponent.score = hot;
+        } else {
+            self.us.score = hot;
+            self.opponent.score = cool;
+        }
+    }
+}
+pub struct Player {
+    pub name: String,
+    pub score: u32,
+    pub side: Side,
 }
 pub struct ChaserGame {
     client: Client,
@@ -55,7 +72,7 @@ impl ChaserGame {
         let mut client = Client::with_server(&url);
         client.send(C2SPacket::PlayerJoin {
             room_id: map.clone(),
-            name,
+            name: name.clone(),
         });
 
         let S2CPacket::JoinedRoom {
@@ -87,17 +104,44 @@ impl ChaserGame {
             panic!("unexpected packet received while waiting for game data")
         };
 
+        let players = if cool_name == name {
+            Players {
+                us: Player {
+                    name: cool_name,
+                    score: cool_score,
+                    side: Side::Cold,
+                },
+                opponent: Player {
+                    name: hot_name,
+                    score: hot_score,
+                    side: Side::Hot,
+                },
+            }
+        } else if hot_name == name {
+            Players {
+                us: Player {
+                    name: hot_name,
+                    score: hot_score,
+                    side: Side::Hot,
+                },
+                opponent: Player {
+                    name: cool_name,
+                    score: cool_score,
+                    side: Side::Cold,
+                },
+            }
+        } else {
+            unreachable!()
+        };
+
         let state = Arc::new(RwLock::new(GameState {
             room: map.clone(),
-            name: cool_name.clone(),
-            opponent_name: hot_name.clone(),
             map: map_data.clone(),
             map_size: (x_size, y_size),
-            score: cool_score,
-            opponent_score: hot_score,
             turns_left: turn,
             phase: GamePhase::Starting,
             effect: None,
+            players,
         }));
         let state2 = Arc::clone(&state);
         let state3 = Arc::clone(&state);
@@ -134,14 +178,13 @@ impl ChaserGame {
                             let mut state = game.state.write();
 
                             state.map = map_data;
-                            state.score = cool_score;
-                            state.opponent_score = hot_score;
                             state.turns_left = turn;
                             state.effect = effect;
+                            state.players.assign_scores(cool_score, hot_score);
 
                             if let Some(Effect { player, .. }) = effect {
                                 state.phase = GamePhase::Turn(player);
-                                if let Side::Hot = player {
+                                if player != state.players.us.side {
                                     game.client.send(C2SPacket::GetReady);
                                 }
                             }

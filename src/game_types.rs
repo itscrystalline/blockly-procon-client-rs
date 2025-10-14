@@ -35,7 +35,7 @@ impl From<String> for Direction {
 }
 
 #[repr(u8)]
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(from = "u8")]
 pub enum Element {
     Blank,
@@ -95,6 +95,20 @@ pub struct Map(Vec<Vec<Element>>);
 impl Map {
     pub fn at(&self, x: usize, y: usize) -> Element {
         self.0[y][x]
+    }
+    pub fn find_player(&self, side: Side) -> (usize, usize) {
+        let to_find = match side {
+            Side::Hot => Element::Hot,
+            Side::Cold => Element::Cold,
+        };
+        for (i, row) in self.0.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate() {
+                if val == to_find {
+                    return (i, j);
+                }
+            }
+        }
+        unreachable!()
     }
 }
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]

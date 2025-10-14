@@ -2,9 +2,7 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use crate::game::Side;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(into = "String")]
 #[serde(from = "String")]
 pub enum Direction {
@@ -79,14 +77,14 @@ pub struct GameData {
     pub effect: Option<Effect>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Effect {
     #[serde(rename = "t")]
-    _t: String,
+    search: SearchType,
     #[serde(rename = "p")]
     pub player: Side,
     #[serde(rename = "d")]
-    _direction: Option<Direction>,
+    direction: Option<Direction>,
 }
 
 #[repr(transparent)]
@@ -97,7 +95,58 @@ impl Map {
     pub fn at(&self, x: usize, y: usize) -> Element {
         self.0[y][x]
     }
-    pub fn empty(size: (u32, u32)) -> Map {
-        Map(Vec::with_capacity(size.1 as usize))
+}
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[serde(into = "String")]
+#[serde(from = "String")]
+pub enum Side {
+    Hot,
+    Cold,
+}
+impl From<Side> for String {
+    fn from(value: Side) -> Self {
+        match value {
+            Side::Hot => "hot",
+            Side::Cold => "cold",
+        }
+        .to_string()
+    }
+}
+impl From<String> for Side {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "hot" => Side::Hot,
+            "cool" => Side::Cold,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[serde(into = "String")]
+#[serde(from = "String")]
+pub enum SearchType {
+    AroundCurrent,
+    AroundSide,
+    Direction,
+}
+impl From<SearchType> for String {
+    fn from(value: SearchType) -> Self {
+        match value {
+            SearchType::AroundCurrent => "r",
+            SearchType::AroundSide => "l",
+            SearchType::Direction => "s",
+        }
+        .to_string()
+    }
+}
+impl From<String> for SearchType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "r" => SearchType::AroundCurrent,
+            "l" => SearchType::AroundSide,
+            "s" => SearchType::Direction,
+            _ => unreachable!(),
+        }
     }
 }

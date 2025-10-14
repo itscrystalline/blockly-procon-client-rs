@@ -144,6 +144,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "egui",
+ "parking_lot",
  "serde",
  "serde_json",
  "winit",

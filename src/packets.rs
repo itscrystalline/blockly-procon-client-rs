@@ -1,9 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    game::Side,
-    game_types::{Direction, GameData},
-};
+use crate::game_types::{Direction, GameData, Side};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case", tag = "packet", content = "data")]

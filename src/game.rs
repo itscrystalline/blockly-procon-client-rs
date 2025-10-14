@@ -1,46 +1,20 @@
+use parking_lot::{RwLock, RwLockReadGuard};
 use std::{
     ffi::OsStr,
     sync::{
-        Arc, RwLock, RwLockReadGuard,
+        Arc,
         mpsc::{Receiver, Sender, TryRecvError, channel},
     },
     thread,
     time::Duration,
 };
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     client::Client,
-    game_types::{Effect, GameData, Map},
+    game_types::{Effect, GameData, Map, Side},
     packets::{C2SPacket, S2CPacket},
     ui,
 };
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-#[serde(into = "String")]
-#[serde(from = "String")]
-pub enum Side {
-    Hot,
-    Cold,
-}
-impl From<Side> for String {
-    fn from(value: Side) -> Self {
-        match value {
-            Side::Hot => "hot",
-            Side::Cold => "cold",
-        }
-        .to_string()
-    }
-}
-impl From<String> for Side {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "hot" => Side::Hot,
-            "cool" => Side::Cold,
-            _ => unreachable!(),
-        }
-    }
-}
 pub enum GamePhase {
     Starting,
     Turn(Side),
@@ -53,6 +27,7 @@ pub struct GameState {
     pub phase: GamePhase,
     pub map: Map,
     pub map_size: (u32, u32),
+    pub effect: Option<Effect>,
     pub score: u32,
     pub opponent_score: u32,
     pub turns_left: u32,
@@ -122,34 +97,32 @@ impl ChaserGame {
             opponent_score: hot_score,
             turns_left: turn,
             phase: GamePhase::Starting,
+            effect: None,
         }));
         let state2 = Arc::clone(&state);
+        let state3 = Arc::clone(&state);
 
         let game = ChaserGame { client, state };
 
         let (c2s_send, c2s_recv) = channel::<C2SPacket>();
         let (ready_send, ready_recv) = channel::<()>();
 
-        let (upd_send, upd_recv) = channel();
-        ui::start_ui(
-            map,
-            cool_name,
-            hot_name,
-            (x_size, y_size),
-            map_data,
-            upd_recv,
-        );
+        ui::start_ui(state3);
 
         thread::spawn(move || {
             let mut game = game;
             game.client.send(C2SPacket::GetReady);
             let mut ready = false;
+            let mut ended = false;
             loop {
                 thread::sleep(Duration::from_millis(20));
+                if ended {
+                    continue;
+                }
                 if let Some(p) = game.client.recv() {
                     match p {
                         S2CPacket::GameResult { winner, .. } => {
-                            game.state.write().unwrap().phase = GamePhase::Ended { winner }
+                            game.state.write().phase = GamePhase::Ended { winner }
                         }
                         S2CPacket::UpdateBoard(GameData {
                             map_data,
@@ -158,13 +131,14 @@ impl ChaserGame {
                             turn,
                             effect,
                         }) => {
-                            let mut state = game.state.write().unwrap();
-                            upd_send.send(map_data.clone()).expect("closed");
+                            let mut state = game.state.write();
 
                             state.map = map_data;
                             state.score = cool_score;
                             state.opponent_score = hot_score;
                             state.turns_left = turn;
+                            state.effect = effect;
+
                             if let Some(Effect { player, .. }) = effect {
                                 state.phase = GamePhase::Turn(player);
                                 if let Side::Hot = player {
@@ -185,7 +159,7 @@ impl ChaserGame {
                 }
                 // send any pending packet
                 let pkt = c2s_recv.try_recv();
-                if !matches!(game.state.read().unwrap().phase, GamePhase::Ended { .. }) {
+                if !matches!(game.state.read().phase, GamePhase::Ended { .. }) {
                     match pkt {
                         Ok(p) if ready => {
                             game.client.send(p);
@@ -196,6 +170,7 @@ impl ChaserGame {
                     }
                 } else {
                     println!("game over!");
+                    ended = true;
                 }
             }
         });
@@ -209,7 +184,7 @@ impl ChaserGame {
 }
 impl ChaserHandle {
     pub fn info(&self) -> RwLockReadGuard<'_, GameState> {
-        self.state.read().unwrap()
+        self.state.read()
     }
     pub fn send(&self, packet: C2SPacket) {
         self.ready.recv().expect("channel closed");

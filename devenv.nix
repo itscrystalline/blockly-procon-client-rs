@@ -4,12 +4,22 @@
   config,
   inputs,
   ...
-}: {
+}: rec {
   # https://devenv.sh/basics/
-  # env.GREET = "devenv";
 
   # https://devenv.sh/packages/
-  packages = with pkgs; [git openssl];
+  packages = with pkgs; [
+    git
+    openssl
+
+    wayland-protocols
+    wayland
+    libxkbcommon
+    libGL
+
+    gtk4
+  ];
+  env.LD_LIBRARY_PATH = "${builtins.toString (pkgs.lib.makeLibraryPath packages)}";
   languages.rust = {
     # https://devenv.sh/languages/
     enable = true;

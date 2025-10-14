@@ -1,15 +1,13 @@
-#![feature(mpmc_channel)]
-
 mod client;
 mod game;
 mod game_types;
 mod packets;
 mod ui;
 
-use std::{thread, time::Duration};
+use std::{ops::Deref, sync::mpsc::channel, thread, time::Duration};
 
 use crate::{
-    game::{ChaserGame, GamePhase},
+    game::{ChaserGame, ChaserHandle, GamePhase, GameState},
     game_types::Direction,
     packets::C2SPacket,
 };

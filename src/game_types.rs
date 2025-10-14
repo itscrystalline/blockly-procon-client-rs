@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 use crate::game::Side;
@@ -56,6 +58,17 @@ impl From<u8> for Element {
         }
     }
 }
+impl Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Element::Blank => " ",
+            Element::Wall => "⬛",
+            Element::Heart => "❤",
+            Element::Cold => "❄",
+            Element::Hot => "🔥",
+        })
+    }
+}
 #[derive(Debug, Deserialize)]
 pub struct GameData {
     pub map_data: Map,
@@ -77,11 +90,14 @@ pub struct Effect {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(transparent)]
 pub struct Map(Vec<Vec<Element>>);
 impl Map {
     pub fn at(&self, x: usize, y: usize) -> Element {
         self.0[y][x]
+    }
+    pub fn empty(size: (u32, u32)) -> Map {
+        Map(Vec::with_capacity(size.1 as usize))
     }
 }

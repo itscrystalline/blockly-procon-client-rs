@@ -1,6 +1,9 @@
 use std::{
     ffi::OsStr,
-    sync::{Arc, RwLock, RwLockReadGuard, mpmc, mpsc},
+    sync::{
+        Arc, RwLock, RwLockReadGuard,
+        mpsc::{Receiver, Sender, TryRecvError, channel},
+    },
     thread,
     time::Duration,
 };
@@ -11,6 +14,7 @@ use crate::{
     client::Client,
     game_types::{Effect, GameData, Map},
     packets::{C2SPacket, S2CPacket},
+    ui,
 };
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(into = "String")]
@@ -57,11 +61,10 @@ pub struct ChaserGame {
     client: Client,
     state: Arc<RwLock<GameState>>,
 }
-#[derive(Clone)]
 pub struct ChaserHandle {
     state: Arc<RwLock<GameState>>,
-    send: mpsc::Sender<C2SPacket>,
-    ready: mpmc::Receiver<()>,
+    send: Sender<C2SPacket>,
+    ready: Receiver<()>,
 }
 impl ChaserGame {
     pub fn join(name: impl ToString, map: impl ToString) -> ChaserHandle {
@@ -110,10 +113,10 @@ impl ChaserGame {
         };
 
         let state = Arc::new(RwLock::new(GameState {
-            room: map,
-            name: cool_name,
-            opponent_name: hot_name,
-            map: map_data,
+            room: map.clone(),
+            name: cool_name.clone(),
+            opponent_name: hot_name.clone(),
+            map: map_data.clone(),
             map_size: (x_size, y_size),
             score: cool_score,
             opponent_score: hot_score,
@@ -124,8 +127,18 @@ impl ChaserGame {
 
         let game = ChaserGame { client, state };
 
-        let (c2s_send, c2s_recv) = mpsc::channel::<C2SPacket>();
-        let (ready_send, ready_recv) = mpmc::channel::<()>();
+        let (c2s_send, c2s_recv) = channel::<C2SPacket>();
+        let (ready_send, ready_recv) = channel::<()>();
+
+        let (upd_send, upd_recv) = channel();
+        ui::start_ui(
+            map,
+            cool_name,
+            hot_name,
+            (x_size, y_size),
+            map_data,
+            upd_recv,
+        );
 
         thread::spawn(move || {
             let mut game = game;
@@ -146,6 +159,7 @@ impl ChaserGame {
                             effect,
                         }) => {
                             let mut state = game.state.write().unwrap();
+                            upd_send.send(map_data.clone()).expect("closed");
 
                             state.map = map_data;
                             state.score = cool_score;
@@ -177,7 +191,7 @@ impl ChaserGame {
                             game.client.send(p);
                             ready = false;
                         }
-                        Err(mpsc::TryRecvError::Disconnected) => panic!("channel disconnected"),
+                        Err(TryRecvError::Disconnected) => panic!("channel disconnected"),
                         _ => (),
                     }
                 } else {

@@ -1,9 +1,6 @@
 use std::{
     ffi::OsStr,
-    sync::{
-        Arc, RwLock, RwLockReadGuard,
-        mpsc::{Receiver, Sender, TryRecvError, channel},
-    },
+    sync::{Arc, RwLock, RwLockReadGuard, mpmc, mpsc},
     thread,
     time::Duration,
 };
@@ -60,10 +57,11 @@ pub struct ChaserGame {
     client: Client,
     state: Arc<RwLock<GameState>>,
 }
+#[derive(Clone)]
 pub struct ChaserHandle {
     state: Arc<RwLock<GameState>>,
-    send: Sender<C2SPacket>,
-    ready: Receiver<()>,
+    send: mpsc::Sender<C2SPacket>,
+    ready: mpmc::Receiver<()>,
 }
 impl ChaserGame {
     pub fn join(name: impl ToString, map: impl ToString) -> ChaserHandle {
@@ -126,8 +124,8 @@ impl ChaserGame {
 
         let game = ChaserGame { client, state };
 
-        let (c2s_send, c2s_recv) = channel::<C2SPacket>();
-        let (ready_send, ready_recv) = channel::<()>();
+        let (c2s_send, c2s_recv) = mpsc::channel::<C2SPacket>();
+        let (ready_send, ready_recv) = mpmc::channel::<()>();
 
         thread::spawn(move || {
             let mut game = game;
@@ -179,7 +177,7 @@ impl ChaserGame {
                             game.client.send(p);
                             ready = false;
                         }
-                        Err(TryRecvError::Disconnected) => panic!("channel disconnected"),
+                        Err(mpsc::TryRecvError::Disconnected) => panic!("channel disconnected"),
                         _ => (),
                     }
                 } else {

@@ -1,7 +1,10 @@
+#![feature(mpmc_channel)]
+
 mod client;
 mod game;
 mod game_types;
 mod packets;
+mod ui;
 
 use std::{thread, time::Duration};
 

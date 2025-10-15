@@ -1,6 +1,8 @@
-use egui::{Color32, RichText};
+use egui::{Color32, RichText, Stroke};
 use egui::{FontFamily::Proportional, TextStyle};
 use parking_lot::Mutex;
+use std::cmp::{max, min};
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::thread;
 
@@ -10,7 +12,7 @@ use egui::FontId;
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 use crate::game::GameState;
-use crate::game_types::Element;
+use crate::game_types::{Direction, Effect, Element, Map, SearchType, Side};
 
 struct ChaserMonitor(Arc<Mutex<GameState>>);
 
@@ -41,6 +43,78 @@ pub fn start_ui(state: Arc<Mutex<GameState>>) {
     });
 }
 
+fn highlight_at(
+    pos: (usize, usize),
+    map_size: (usize, usize),
+    map: &Map,
+    effect: &Effect,
+) -> Option<Color32> {
+    fn range(
+        r_x: RangeInclusive<usize>,
+        r_y: RangeInclusive<usize>,
+    ) -> impl Iterator<Item = (usize, usize)> {
+        (r_x).flat_map(move |x| (r_y.clone()).map(move |y| (x, y)))
+    }
+    macro_rules! r {
+        ($pos: expr, $map_size: expr) => {
+            $pos.saturating_sub(1)..=min($pos + 1, $map_size - 1)
+        };
+    }
+
+    let Effect {
+        search,
+        player,
+        direction,
+    } = effect;
+    let expected = match player {
+        Side::Hot => Element::Hot,
+        Side::Cold => Element::Cold,
+    };
+
+    let mut check_range = match search {
+        SearchType::AroundCurrent => range(r!(pos.0, map_size.0), r!(pos.1, map_size.1)),
+        SearchType::AroundSide => match direction {
+            Some(Direction::Top) => range(r!(pos.0, map_size.0), r!(pos.1 + 2, map_size.1)),
+            Some(Direction::Bottom) => range(
+                r!(pos.0, map_size.0),
+                r!(pos.1.saturating_sub(2), map_size.1),
+            ),
+            Some(Direction::Left) => range(r!(pos.0 + 2, map_size.0), r!(pos.1, map_size.1)),
+            Some(Direction::Right) => range(
+                r!(pos.0.saturating_sub(2), map_size.0),
+                r!(pos.1, map_size.1),
+            ),
+
+            None => unreachable!(),
+        },
+        SearchType::Direction => match direction {
+            Some(Direction::Top) => {
+                range(pos.0..=pos.0, pos.1 + 1..=min(pos.1 + 9, map_size.1 - 1))
+            }
+            Some(Direction::Bottom) => range(
+                pos.0..=pos.0,
+                max(0, pos.1.saturating_sub(9))..=pos.1.saturating_sub(1),
+            ),
+            Some(Direction::Left) => {
+                range(pos.0 + 1..=min(pos.0 + 9, map_size.0 - 1), pos.1..=pos.1)
+            }
+            Some(Direction::Right) => range(
+                max(0, pos.0.saturating_sub(9))..=pos.0.saturating_sub(1),
+                pos.1..=pos.1,
+            ),
+
+            None => unreachable!(),
+        },
+    };
+
+    check_range
+        .any(|(x, y)| map.at(x, y) == expected)
+        .then_some(match search {
+            SearchType::AroundCurrent => Color32::from_rgb(55, 66, 47),
+            SearchType::AroundSide | SearchType::Direction => Color32::from_rgb(22, 62, 91),
+        })
+}
+
 impl eframe::App for ChaserMonitor {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -49,7 +123,7 @@ impl eframe::App for ChaserMonitor {
             ui.style_mut().text_styles = style.text_styles;
 
             let info = self.0.lock();
-            let (map, (cols, rows)) = (&info.map, info.map_size);
+            let (map, (cols, rows), effect) = (&info.map, info.map_size, &info.effect);
 
             let available = ui.available_size();
 
@@ -71,17 +145,29 @@ impl eframe::App for ChaserMonitor {
                         egui::vec2(cell_w - 3.0, cell_h - 3.0),
                     );
 
-                    let elem = map.at(col as usize, row as usize);
-                    ui.put(
-                        cell_rect,
-                        egui::Button::new(RichText::new(elem.to_string()).color(match elem {
-                            Element::Blank => Color32::PLACEHOLDER,
-                            Element::Wall => Color32::WHITE,
-                            Element::Heart => Color32::from_rgb(230, 69, 83),
-                            Element::Cold => Color32::from_rgb(4, 165, 229),
-                            Element::Hot => Color32::from_rgb(210, 15, 57),
-                        })),
-                    );
+                    let elem = map.at(col, row);
+                    let color = match elem {
+                        Element::Blank => Color32::TRANSPARENT,
+                        Element::Wall => Color32::WHITE,
+                        Element::Heart => Color32::from_rgb(230, 69, 83),
+                        Element::Cold => Color32::from_rgb(4, 165, 229),
+                        Element::Hot => Color32::from_rgb(210, 15, 57),
+                    };
+                    let border_color = match elem {
+                        Element::Blank => Color32::TRANSPARENT,
+                        Element::Wall => Color32::TRANSPARENT,
+                        Element::Heart => Color32::TRANSPARENT,
+                        Element::Cold => Color32::from_rgb(4, 165, 229),
+                        Element::Hot => Color32::from_rgb(210, 15, 57),
+                    };
+                    let mut btn = egui::Button::new(RichText::new(elem.to_string()).color(color))
+                        .stroke(Stroke::new(1.0, border_color));
+                    if let Some(effect) = effect
+                        && let Some(color) = highlight_at((col, row), (cols, rows), map, effect)
+                    {
+                        btn = btn.fill(color);
+                    }
+                    ui.put(cell_rect, btn);
                 }
             }
             ui.ctx().request_repaint();

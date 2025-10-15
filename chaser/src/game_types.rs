@@ -107,11 +107,11 @@ pub struct GameData {
 #[allow(dead_code)]
 pub struct Effect {
     #[serde(rename = "t")]
-    search: SearchType,
+    pub search: SearchType,
     #[serde(rename = "p")]
     pub player: Side,
     #[serde(rename = "d")]
-    direction: Option<Direction>,
+    pub direction: Option<Direction>,
 }
 
 #[repr(transparent)]

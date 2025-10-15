@@ -8,10 +8,15 @@ use crate::game_types::{Direction, Element, GameData, Side};
 #[allow(dead_code)]
 #[serde(rename_all = "snake_case", tag = "packet", content = "data")]
 pub enum C2SPacket {
-    PlayerJoin { room_id: String, name: String },
+    PlayerJoin {
+        room_id: String,
+        name: String,
+    },
     GetReady,
     MovePlayer(Direction),
+    /// Looks in a 3x3 grid next to the player, shifted in the specified direction.
     Look(Direction),
+    /// Looks in a 9 cell line starting next to the player, extending into the specified direction.
     Search(Direction),
     PutWall(Direction),
 }

@@ -36,5 +36,7 @@ fn main() {
         }
 
         handle.send(C2SPacket::MovePlayer(current_dir));
+        handle.send(C2SPacket::Look(current_dir));
+        handle.send(C2SPacket::Search(current_dir));
     });
 }

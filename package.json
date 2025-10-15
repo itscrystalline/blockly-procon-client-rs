@@ -1,6 +1,6 @@
 {
   "name": "blockly-procon-client",
-  "module": "src/proxy.ts",
+  "module": "proxy.ts",
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -9,7 +9,7 @@
   },
   "private": true,
   "scripts": {
-    "start": "bun run src/proxy.ts"
+    "start": "bun run proxy.ts"
   },
   "type": "module",
   "dependencies": {

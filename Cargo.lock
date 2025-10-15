@@ -139,18 +139,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blockly-procon-client"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "parking_lot",
- "serde",
- "serde_json",
- "winit",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -251,6 +239,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ced0551234e87afee12411d535648dd89d2e7f34c78b753395567aff3d447ff"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "chaser"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "winit",
 ]
 
 [[package]]
@@ -1635,6 +1635,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89ae43fd86e4158d6db51ad8e2b80f313af9cc74f5c0e03ccb87de09998732de"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "procon-client"
+version = "0.1.0"
+dependencies = [
+ "chaser",
 ]
 
 [[package]]

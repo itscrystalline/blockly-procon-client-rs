@@ -5,10 +5,9 @@ use std::{
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
         Arc,
-        mpsc::{Receiver, Sender, TryRecvError, channel},
+        mpsc::{Receiver, TryRecvError, channel},
     },
     thread,
-    time::Duration,
 };
 
 use crate::packets::{C2SPacket, S2CPacket};
@@ -73,7 +72,7 @@ fn setup_proxy(
 impl Client {
     pub fn with_server(server: impl AsRef<OsStr>) -> Self {
         let mut proxy = Command::new("bun")
-            .args(["run", "src/proxy.ts"])
+            .args(["run", "proxy.ts"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .env("SERVER", server)

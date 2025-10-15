@@ -1,20 +1,8 @@
-mod client;
-mod game;
-mod game_types;
-mod packets;
-mod ui;
-
-use std::{thread, time::Duration};
-
-use crate::{
-    game::{ChaserGame, GamePhase},
-    game_types::Direction,
-    packets::C2SPacket,
-};
+use chaser::{game::ChaserGame, game_types::Direction, packets::C2SPacket};
 
 fn main() {
     let handle = ChaserGame::join("crystal", "Practice1");
-    let mut current_dir = Direction::Top;
+    let mut current_dir = Direction::Bottom;
     let mut state = State::Current;
     // handle.send(C2SPacket::MovePlayer(Direction::Left));
     // handle.send(C2SPacket::MovePlayer(Direction::Left));

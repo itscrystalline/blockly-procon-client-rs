@@ -200,7 +200,6 @@ impl ChaserGame {
                                 {
                                     p.pos = pos;
                                 }
-                                println!("hey");
 
                                 if player != state.players.us.side {
                                     game.client.send(C2SPacket::GetReady);

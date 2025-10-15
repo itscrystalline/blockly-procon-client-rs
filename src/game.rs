@@ -11,7 +11,7 @@ use std::{
 
 use crate::{
     client::Client,
-    game_types::{Effect, GameData, Map, Side},
+    game_types::{Direction, Effect, GameData, Map, Side},
     packets::{C2SPacket, S2CPacket},
     ui,
 };
@@ -24,7 +24,7 @@ pub struct GameState {
     pub room: String,
     pub phase: GamePhase,
     pub map: Map,
-    pub map_size: (u32, u32),
+    pub map_size: (usize, usize),
     pub effect: Option<Effect>,
     pub turns_left: u32,
     pub players: Players,
@@ -46,6 +46,7 @@ impl Players {
 }
 pub struct Player {
     pub name: String,
+    pub pos: (usize, usize),
     pub score: u32,
     pub side: Side,
 }
@@ -104,15 +105,19 @@ impl ChaserGame {
             panic!("unexpected packet received while waiting for game data")
         };
 
+        let cool_pos = map_data.find_player(Side::Cold);
+        let hot_pos = map_data.find_player(Side::Hot);
         let players = if cool_name == name {
             Players {
                 us: Player {
                     name: cool_name,
+                    pos: cool_pos.expect("!cool_pos"),
                     score: cool_score,
                     side: Side::Cold,
                 },
                 opponent: Player {
                     name: hot_name,
+                    pos: hot_pos.expect("!hot_pos"),
                     score: hot_score,
                     side: Side::Hot,
                 },
@@ -121,11 +126,13 @@ impl ChaserGame {
             Players {
                 us: Player {
                     name: hot_name,
+                    pos: hot_pos.expect("!hot_pos"),
                     score: hot_score,
                     side: Side::Hot,
                 },
                 opponent: Player {
                     name: cool_name,
+                    pos: cool_pos.expect("!cool_pos"),
                     score: cool_score,
                     side: Side::Cold,
                 },
@@ -176,18 +183,33 @@ impl ChaserGame {
                             effect,
                         }) => {
                             let mut state = game.state.write();
+                            let size = state.map_size;
+
+                            if let Some(Effect { player, .. }) = effect {
+                                state.phase = GamePhase::Turn(player);
+
+                                let p = if player == state.players.us.side {
+                                    &mut state.players.us
+                                } else {
+                                    &mut state.players.opponent
+                                };
+                                let old_pos = p.pos;
+                                if let Some(pos) =
+                                    map_data.find_player_around(player, old_pos, size)
+                                {
+                                    p.pos = pos;
+                                }
+                                println!("hey");
+
+                                if player != state.players.us.side {
+                                    game.client.send(C2SPacket::GetReady);
+                                }
+                            }
 
                             state.map = map_data;
                             state.turns_left = turn;
                             state.effect = effect;
                             state.players.assign_scores(cool_score, hot_score);
-
-                            if let Some(Effect { player, .. }) = effect {
-                                state.phase = GamePhase::Turn(player);
-                                if player != state.players.us.side {
-                                    game.client.send(C2SPacket::GetReady);
-                                }
-                            }
                         }
                         S2CPacket::GetReadyRec { .. } => {
                             ready = true;
@@ -205,6 +227,15 @@ impl ChaserGame {
                 if !matches!(game.state.read().phase, GamePhase::Ended { .. }) {
                     match pkt {
                         Ok(p) if ready => {
+                            if let C2SPacket::MovePlayer(dir) = p {
+                                let old_pos = game.state.read().players.us.pos;
+                                game.state.write().players.us.pos = match dir {
+                                    Direction::Top => (old_pos.0, old_pos.1.saturating_sub(1)),
+                                    Direction::Bottom => (old_pos.0, old_pos.1 + 1),
+                                    Direction::Left => (old_pos.0.saturating_sub(1), old_pos.1),
+                                    Direction::Right => (old_pos.0 + 1, old_pos.1),
+                                }
+                            }
                             game.client.send(p);
                             ready = false;
                         }

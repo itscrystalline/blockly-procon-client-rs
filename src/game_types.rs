@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::min, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
@@ -96,7 +96,7 @@ impl Map {
     pub fn at(&self, x: usize, y: usize) -> Element {
         self.0[y][x]
     }
-    pub fn find_player(&self, side: Side) -> (usize, usize) {
+    pub fn find_player(&self, side: Side) -> Option<(usize, usize)> {
         let to_find = match side {
             Side::Hot => Element::Hot,
             Side::Cold => Element::Cold,
@@ -104,11 +104,35 @@ impl Map {
         for (i, row) in self.0.iter().enumerate() {
             for (j, &val) in row.iter().enumerate() {
                 if val == to_find {
-                    return (i, j);
+                    return Some((j, i));
                 }
             }
         }
-        unreachable!()
+        None
+    }
+    pub fn find_player_around(
+        &self,
+        side: Side,
+        old_pos: (usize, usize),
+        size: (usize, usize),
+    ) -> Option<(usize, usize)> {
+        let to_find = match side {
+            Side::Hot => Element::Hot,
+            Side::Cold => Element::Cold,
+        };
+        let min_x = old_pos.0.saturating_sub(1);
+        let max_x = min(old_pos.0 + 1, size.0 - 1);
+        let min_y = old_pos.1.saturating_sub(1);
+        let max_y = min(old_pos.1 + 1, size.1 - 1);
+
+        for i in min_x..=max_x {
+            for j in min_y..=max_y {
+                if self.at(i, j) == to_find {
+                    return Some((i, j));
+                }
+            }
+        }
+        None
     }
 }
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]

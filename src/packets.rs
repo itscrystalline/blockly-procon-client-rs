@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::game_types::{Direction, GameData, Side};
+use crate::game_types::{Direction, Element, GameData, Side};
 
 #[derive(Debug, Serialize)]
 #[allow(dead_code)]
@@ -19,8 +19,8 @@ pub enum C2SPacket {
 #[serde(rename_all = "snake_case", tag = "packet", content = "data")]
 pub enum S2CPacket {
     JoinedRoom {
-        x_size: u32,
-        y_size: u32,
+        x_size: usize,
+        y_size: usize,
         cool_name: String,
         hot_name: String,
     },
@@ -34,18 +34,18 @@ pub enum S2CPacket {
     UpdateBoard(GameData),
     GetReadyRec {
         #[serde(default)]
-        rec_data: Option<Vec<u8>>,
+        rec_data: Option<Vec<Element>>,
     },
     MoveRec {
-        rec_data: Vec<u8>,
+        rec_data: Vec<Element>,
     },
     LookRec {
-        rec_data: Vec<u8>,
+        rec_data: Vec<Element>,
     },
     SearchRec {
-        rec_data: Vec<u8>,
+        rec_data: Vec<Element>,
     },
     PutRec {
-        rec_data: Vec<u8>,
+        rec_data: Vec<Element>,
     },
 }

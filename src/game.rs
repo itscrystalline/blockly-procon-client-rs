@@ -1,10 +1,9 @@
-use parking_lot::{Mutex, RwLock, RwLockReadGuard};
+use parking_lot::{Mutex, MutexGuard};
 use std::{
     ffi::OsStr,
-    ops::Deref,
     sync::{
         Arc,
-        mpsc::{Receiver, Sender, TryRecvError, channel},
+        mpsc::{Receiver, channel},
     },
     thread,
     time::Duration,
@@ -53,10 +52,10 @@ pub struct Player {
 }
 pub struct ChaserGame {
     client: Client,
-    state: Arc<RwLock<GameState>>,
+    state: Arc<Mutex<GameState>>,
 }
 pub struct ChaserHandle {
-    state: Arc<RwLock<GameState>>,
+    state: Arc<Mutex<GameState>>,
     send: Arc<Mutex<Option<C2SPacket>>>,
     ready: Receiver<()>,
 }
@@ -142,7 +141,7 @@ impl ChaserGame {
             unreachable!()
         };
 
-        let state = Arc::new(RwLock::new(GameState {
+        let state = Arc::new(Mutex::new(GameState {
             room: map.clone(),
             map: map_data.clone(),
             map_size: (x_size, y_size),
@@ -168,14 +167,14 @@ impl ChaserGame {
             let mut ready = false;
             let mut ended = false;
             loop {
-                thread::sleep(Duration::from_millis(20));
+                thread::sleep(Duration::from_millis(10));
                 if ended {
                     continue;
                 }
                 if let Some(p) = game.client.recv() {
                     match p {
                         S2CPacket::GameResult { winner, .. } => {
-                            game.state.write().phase = GamePhase::Ended { winner }
+                            game.state.lock().phase = GamePhase::Ended { winner }
                         }
                         S2CPacket::UpdateBoard(GameData {
                             map_data,
@@ -184,7 +183,7 @@ impl ChaserGame {
                             turn,
                             effect,
                         }) => {
-                            let mut state = game.state.write();
+                            let mut state = game.state.lock();
                             let size = state.map_size;
 
                             if let Some(Effect { player, .. }) = effect {
@@ -226,12 +225,12 @@ impl ChaserGame {
                     }
                 }
                 // send any pending packet
-                if !matches!(game.state.read().phase, GamePhase::Ended { .. }) {
+                if !matches!(game.state.lock().phase, GamePhase::Ended { .. }) {
                     match c2s_arc1.lock().take() {
                         Some(p) if ready => {
                             if let C2SPacket::MovePlayer(dir) = p {
-                                let old_pos = game.state.read().players.us.pos;
-                                game.state.write().players.us.pos = match dir {
+                                let old_pos = game.state.lock().players.us.pos;
+                                game.state.lock().players.us.pos = match dir {
                                     Direction::Top => (old_pos.0, old_pos.1.saturating_sub(1)),
                                     Direction::Bottom => (old_pos.0, old_pos.1 + 1),
                                     Direction::Left => (old_pos.0.saturating_sub(1), old_pos.1),
@@ -256,10 +255,21 @@ impl ChaserGame {
             ready: ready_recv,
         }
     }
+
+    #[inline]
+    pub fn run_loop(handle: ChaserHandle, mut f: impl FnMut(&ChaserHandle)) {
+        loop {
+            // wait a bit for sync
+            thread::sleep(Duration::from_millis(50));
+            if !matches!(handle.info().phase, GamePhase::Ended { .. }) {
+                f(&handle)
+            }
+        }
+    }
 }
 impl ChaserHandle {
-    pub fn info(&self) -> RwLockReadGuard<'_, GameState> {
-        self.state.read()
+    pub fn info(&self) -> MutexGuard<'_, GameState> {
+        self.state.lock()
     }
     pub fn send(&self, packet: C2SPacket) {
         self.ready.recv().expect("channel closed");

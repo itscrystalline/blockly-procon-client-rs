@@ -8,6 +8,7 @@ use std::{
         mpsc::{Receiver, Sender, TryRecvError, channel},
     },
     thread,
+    time::Duration,
 };
 
 use crate::packets::{C2SPacket, S2CPacket};
@@ -44,7 +45,7 @@ fn setup_proxy(
                 let json_str =
                     String::from_utf8(std::mem::take(&mut command)).expect("incorrect string");
                 let packet = serde_json::from_str(&json_str).expect("incorrect json");
-                println!("S -> C: {packet:?}");
+                println!("S -> C: {packet}");
                 s2c_send
                     .send(packet)
                     .expect("cannot send json to main thread");
@@ -61,7 +62,7 @@ fn setup_proxy(
                 stdin
                     .write_all(json.as_bytes())
                     .expect("cannot send packet");
-                println!("S <- C: {p:?}");
+                println!("S <- C: {p}");
             }
         }
     });

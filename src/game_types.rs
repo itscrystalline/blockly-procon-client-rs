@@ -33,6 +33,32 @@ impl From<String> for Direction {
         }
     }
 }
+impl Direction {
+    pub const fn flip(self) -> Self {
+        match self {
+            Direction::Top => Direction::Bottom,
+            Direction::Bottom => Direction::Top,
+            Direction::Left => Direction::Right,
+            Direction::Right => Direction::Left,
+        }
+    }
+    pub const fn left(self) -> Self {
+        match self {
+            Direction::Top => Direction::Left,
+            Direction::Bottom => Direction::Right,
+            Direction::Left => Direction::Bottom,
+            Direction::Right => Direction::Top,
+        }
+    }
+    pub const fn right(self) -> Self {
+        match self {
+            Direction::Top => Direction::Right,
+            Direction::Bottom => Direction::Left,
+            Direction::Left => Direction::Top,
+            Direction::Right => Direction::Bottom,
+        }
+    }
+}
 
 #[repr(u8)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]

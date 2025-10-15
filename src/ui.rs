@@ -1,6 +1,6 @@
 use egui::{Color32, RichText};
 use egui::{FontFamily::Proportional, TextStyle};
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use std::sync::Arc;
 use std::thread;
 
@@ -12,12 +12,12 @@ use winit::platform::wayland::EventLoopBuilderExtWayland;
 use crate::game::GameState;
 use crate::game_types::Element;
 
-struct ChaserMonitor(Arc<RwLock<GameState>>);
+struct ChaserMonitor(Arc<Mutex<GameState>>);
 
-pub fn start_ui(state: Arc<RwLock<GameState>>) {
+pub fn start_ui(state: Arc<Mutex<GameState>>) {
     thread::spawn(move || {
         let (room, name, opp_name) = {
-            let info = state.read();
+            let info = state.lock();
             (
                 info.room.clone(),
                 info.players.us.name.clone(),
@@ -48,7 +48,7 @@ impl eframe::App for ChaserMonitor {
             style.text_styles = [(TextStyle::Button, FontId::new(24.0, Proportional))].into();
             ui.style_mut().text_styles = style.text_styles;
 
-            let info = self.0.read();
+            let info = self.0.lock();
             let (map, (cols, rows)) = (&info.map, info.map_size);
 
             let available = ui.available_size();

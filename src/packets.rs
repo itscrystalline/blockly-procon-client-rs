@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use serde::{Deserialize, Serialize};
 
 use crate::game_types::{Direction, Element, GameData, Side};
@@ -48,4 +50,35 @@ pub enum S2CPacket {
     PutRec {
         rec_data: Vec<Element>,
     },
+}
+
+impl Display for C2SPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            C2SPacket::PlayerJoin { .. } => "PlayerJoin",
+            C2SPacket::GetReady => "GetReady",
+            C2SPacket::MovePlayer(_) => "MovePlayer",
+            C2SPacket::Look(_) => "Look",
+            C2SPacket::Search(_) => "Search",
+            C2SPacket::PutWall(_) => "PutWall",
+        };
+        write!(f, "{name}")
+    }
+}
+
+impl fmt::Display for S2CPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            S2CPacket::JoinedRoom { .. } => "JoinedRoom",
+            S2CPacket::GameResult { .. } => "GameResult",
+            S2CPacket::NewBoard(_) => "NewBoard",
+            S2CPacket::UpdateBoard(_) => "UpdateBoard",
+            S2CPacket::GetReadyRec { .. } => "GetReadyRec",
+            S2CPacket::MoveRec { .. } => "MoveRec",
+            S2CPacket::LookRec { .. } => "LookRec",
+            S2CPacket::SearchRec { .. } => "SearchRec",
+            S2CPacket::PutRec { .. } => "PutRec",
+        };
+        write!(f, "{name}")
+    }
 }

@@ -1,6 +1,7 @@
-use parking_lot::{RwLock, RwLockReadGuard};
+use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use std::{
     ffi::OsStr,
+    ops::Deref,
     sync::{
         Arc,
         mpsc::{Receiver, Sender, TryRecvError, channel},
@@ -56,7 +57,7 @@ pub struct ChaserGame {
 }
 pub struct ChaserHandle {
     state: Arc<RwLock<GameState>>,
-    send: Sender<C2SPacket>,
+    send: Arc<Mutex<Option<C2SPacket>>>,
     ready: Receiver<()>,
 }
 impl ChaserGame {
@@ -155,7 +156,8 @@ impl ChaserGame {
 
         let game = ChaserGame { client, state };
 
-        let (c2s_send, c2s_recv) = channel::<C2SPacket>();
+        let c2s_arc1 = Arc::new(Mutex::new(None));
+        let c2s_arc2 = Arc::clone(&c2s_arc1);
         let (ready_send, ready_recv) = channel::<()>();
 
         ui::start_ui(state3);
@@ -203,6 +205,7 @@ impl ChaserGame {
 
                                 if player != state.players.us.side {
                                     game.client.send(C2SPacket::GetReady);
+                                    ready = false;
                                 }
                             }
 
@@ -223,10 +226,9 @@ impl ChaserGame {
                     }
                 }
                 // send any pending packet
-                let pkt = c2s_recv.try_recv();
                 if !matches!(game.state.read().phase, GamePhase::Ended { .. }) {
-                    match pkt {
-                        Ok(p) if ready => {
+                    match c2s_arc1.lock().take() {
+                        Some(p) if ready => {
                             if let C2SPacket::MovePlayer(dir) = p {
                                 let old_pos = game.state.read().players.us.pos;
                                 game.state.write().players.us.pos = match dir {
@@ -239,7 +241,6 @@ impl ChaserGame {
                             game.client.send(p);
                             ready = false;
                         }
-                        Err(TryRecvError::Disconnected) => panic!("channel disconnected"),
                         _ => (),
                     }
                 } else {
@@ -251,7 +252,7 @@ impl ChaserGame {
 
         ChaserHandle {
             state: state2,
-            send: c2s_send,
+            send: c2s_arc2,
             ready: ready_recv,
         }
     }
@@ -262,6 +263,6 @@ impl ChaserHandle {
     }
     pub fn send(&self, packet: C2SPacket) {
         self.ready.recv().expect("channel closed");
-        self.send.send(packet).expect("channel closed");
+        _ = self.send.lock().insert(packet);
     }
 }

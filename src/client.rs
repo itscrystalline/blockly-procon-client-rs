@@ -1,8 +1,12 @@
+use parking_lot::Mutex;
 use std::{
     ffi::OsStr,
     io::{Read, Write},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
-    sync::mpsc::{Receiver, Sender, TryRecvError, channel},
+    sync::{
+        Arc,
+        mpsc::{Receiver, Sender, TryRecvError, channel},
+    },
     thread,
 };
 
@@ -10,7 +14,7 @@ use crate::packets::{C2SPacket, S2CPacket};
 
 pub struct Client {
     _proxy: Child,
-    c2s: Sender<C2SPacket>,
+    c2s: Arc<Mutex<Option<C2SPacket>>>,
     s2c: Receiver<S2CPacket>,
 }
 impl Default for Client {
@@ -22,9 +26,10 @@ impl Default for Client {
 fn setup_proxy(
     mut stdin: ChildStdin,
     mut stdout: ChildStdout,
-) -> (Receiver<S2CPacket>, Sender<C2SPacket>) {
+) -> (Receiver<S2CPacket>, Arc<Mutex<Option<C2SPacket>>>) {
     let (s2c_send, s2c_recv) = channel::<S2CPacket>();
-    let (c2s_send, c2s_recv) = channel::<C2SPacket>();
+    let c2s_arc1 = Arc::new(Mutex::new(None));
+    let c2s_arc2 = Arc::clone(&c2s_arc1);
     // read packets from child stdout
     thread::spawn(move || {
         let mut command: Vec<u8> = vec![];
@@ -50,21 +55,18 @@ fn setup_proxy(
     // write packets to child stdin
     thread::spawn(move || {
         loop {
-            match c2s_recv.recv() {
-                Ok(p) => {
-                    let mut json = serde_json::to_string(&p).expect("cannot encode packet");
-                    json.push('\n');
-                    stdin
-                        .write_all(json.as_bytes())
-                        .expect("cannot send packet");
-                    println!("S <- C: {p:?}");
-                }
-                Err(e) => eprintln!("Error reading from packet channel: {e}"),
+            if let Some(p) = c2s_arc1.lock().take() {
+                let mut json = serde_json::to_string(&p).expect("cannot encode packet");
+                json.push('\n');
+                stdin
+                    .write_all(json.as_bytes())
+                    .expect("cannot send packet");
+                println!("S <- C: {p:?}");
             }
         }
     });
 
-    (s2c_recv, c2s_send)
+    (s2c_recv, c2s_arc2)
 }
 
 impl Client {
@@ -92,9 +94,7 @@ impl Client {
     }
 
     pub fn send(&mut self, packet: C2SPacket) {
-        self.c2s
-            .send(packet)
-            .expect("failed to send; channel closed");
+        _ = self.c2s.lock().insert(packet);
     }
 
     pub fn recv(&mut self) -> Option<S2CPacket> {

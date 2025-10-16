@@ -1,5 +1,6 @@
 use parking_lot::{Mutex, MutexGuard};
 use std::{
+    cmp::min,
     ffi::OsStr,
     sync::{
         Arc,
@@ -11,7 +12,7 @@ use std::{
 
 use crate::{
     client::Client,
-    game_types::{Direction, Effect, GameData, Map, Side},
+    game_types::{Direction, Effect, Element, GameData, Map, Side},
     packets::{C2SPacket, S2CPacket},
     ui,
 };
@@ -143,7 +144,11 @@ impl ChaserGame {
 
         let state = Arc::new(Mutex::new(GameState {
             room: map.clone(),
-            map: map_data.clone(),
+            map: if cfg!(feature = "fog_of_war") {
+                Map::empty((x_size, y_size))
+            } else {
+                map_data.clone()
+            },
             map_size: (x_size, y_size),
             turns_left: turn,
             phase: GamePhase::Starting,
@@ -165,10 +170,12 @@ impl ChaserGame {
             let mut game = game;
             game.client.send(C2SPacket::GetReady);
             let mut ready = false;
-            let mut ended = false;
+            let mut ended: Option<Side> = None;
+            let our_side = game.state.lock().players.us.side;
+            let mut last_search: Option<Direction> = None;
             loop {
                 thread::sleep(Duration::from_millis(10));
-                if ended {
+                if ended.is_some() {
                     continue;
                 }
                 if let Some(p) = game.client.recv() {
@@ -177,7 +184,7 @@ impl ChaserGame {
                             game.state.lock().phase = GamePhase::Ended { winner }
                         }
                         S2CPacket::UpdateBoard(GameData {
-                            map_data,
+                            mut map_data,
                             cool_score,
                             hot_score,
                             turn,
@@ -199,6 +206,16 @@ impl ChaserGame {
                                     map_data.find_player_around(player, old_pos, size)
                                 {
                                     p.pos = pos;
+                                    if cfg!(feature = "fog_of_war") {
+                                        map_data.set(
+                                            pos.0,
+                                            pos.1,
+                                            match p.side {
+                                                Side::Hot => Element::Hot,
+                                                Side::Cold => Element::Cold,
+                                            },
+                                        );
+                                    }
                                 }
 
                                 if player != state.players.us.side {
@@ -207,7 +224,30 @@ impl ChaserGame {
                                 }
                             }
 
-                            state.map = map_data;
+                            if cfg!(not(feature = "fog_of_war")) {
+                                state.map = map_data;
+                            } else {
+                                let us = state.players.us.pos;
+                                let us_side = state.players.us.side;
+                                let opp = state.players.opponent.pos;
+                                let opp_side = state.players.opponent.side;
+                                state.map.set(
+                                    us.0,
+                                    us.1,
+                                    match us_side {
+                                        Side::Hot => Element::Hot,
+                                        Side::Cold => Element::Cold,
+                                    },
+                                );
+                                state.map.set(
+                                    opp.0,
+                                    opp.1,
+                                    match opp_side {
+                                        Side::Hot => Element::Hot,
+                                        Side::Cold => Element::Cold,
+                                    },
+                                );
+                            }
                             state.turns_left = turn;
                             state.effect = effect;
                             state.players.assign_scores(cool_score, hot_score);
@@ -216,15 +256,103 @@ impl ChaserGame {
                             ready = true;
                             ready_send.send(()).expect("channel closed");
                         }
-                        S2CPacket::MoveRec { .. }
-                        | S2CPacket::LookRec { .. }
-                        | S2CPacket::SearchRec { .. }
-                        | S2CPacket::PutRec { .. } => (),
+                        S2CPacket::MoveRec { rec_data }
+                        | S2CPacket::PutRec { rec_data }
+                        | S2CPacket::LookRec { rec_data } => {
+                            if cfg!(feature = "fog_of_war") {
+                                let mut state = game.state.lock();
+                                let pos = state.players.us.pos;
+                                let side = state.players.us.side;
+                                let map = &mut state.map;
+
+                                let offset = match last_search {
+                                    None => (0, 0),
+                                    Some(Direction::Top) => (0, -1),
+                                    Some(Direction::Bottom) => (0, 1),
+                                    Some(Direction::Left) => (-1, 0),
+                                    Some(Direction::Right) => (1, 0),
+                                };
+
+                                for (i, elem) in rec_data.into_iter().enumerate() {
+                                    let x_offset = (i % 3) as isize - 1 + offset.0;
+                                    let y_offset = (i / 3) as isize - 1 + offset.1;
+                                    if let Some(x) = pos.0.checked_add_signed(x_offset)
+                                        && let Some(y) = pos.1.checked_add_signed(y_offset)
+                                    {
+                                        if x_offset == 0 && y_offset == 0 {
+                                            _ = map.set(
+                                                x,
+                                                y,
+                                                match side {
+                                                    Side::Hot => Element::Hot,
+                                                    Side::Cold => Element::Cold,
+                                                },
+                                            );
+                                        } else {
+                                            _ = map.set(x, y, elem.into_elem(side));
+                                        }
+                                    }
+                                }
+
+                                _ = last_search.take();
+                            }
+                        }
+                        S2CPacket::SearchRec { rec_data } if cfg!(feature = "fog_of_war") => {
+                            if let Some(dir) = last_search {
+                                let mut state = game.state.lock();
+                                let pos = state.players.us.pos;
+                                let side = state.players.us.side;
+                                let map_size = state.map_size;
+                                let map = &mut state.map;
+
+                                let range = match dir {
+                                    Direction::Top => {
+                                        pos.1.saturating_sub(9)..=pos.1.saturating_sub(1)
+                                    }
+                                    Direction::Bottom => {
+                                        min(pos.1 + 1, map_size.1)..=min(pos.1 + 9, map_size.1)
+                                    }
+                                    Direction::Left => {
+                                        pos.0.saturating_sub(9)..=pos.0.saturating_sub(1)
+                                    }
+                                    Direction::Right => {
+                                        min(pos.0 + 1, map_size.0)..=min(pos.0 + 9, map_size.0)
+                                    }
+                                };
+                                let other_pos = match dir {
+                                    Direction::Top | Direction::Bottom => pos.0,
+                                    Direction::Left | Direction::Right => pos.1,
+                                };
+
+                                for (i, (elem, pos)) in rec_data.into_iter().zip(range).enumerate()
+                                {
+                                    if i == 5 {
+                                        continue;
+                                    }
+                                    let x = if matches!(dir, Direction::Top | Direction::Bottom) {
+                                        other_pos
+                                    } else {
+                                        pos
+                                    };
+                                    let y = if matches!(dir, Direction::Left | Direction::Right) {
+                                        other_pos
+                                    } else {
+                                        pos
+                                    };
+                                    _ = map.set(x, y, elem.into_elem(side));
+                                }
+                            }
+                            _ = last_search.take();
+                        }
                         _ => (),
                     }
                 }
                 // send any pending packet
-                if !matches!(game.state.lock().phase, GamePhase::Ended { .. }) {
+                if let GamePhase::Ended { winner } = game.state.lock().phase {
+                    println!("game over! {winner:?} won!");
+                    println!("we are {our_side:?}");
+                    ended = Some(winner);
+                } else {
                     match c2s_arc1.lock().take() {
                         Some(p) if ready => {
                             if let C2SPacket::MovePlayer(dir) = p {
@@ -236,14 +364,14 @@ impl ChaserGame {
                                     Direction::Right => (old_pos.0 + 1, old_pos.1),
                                 }
                             }
+                            if let C2SPacket::Look(dir) | C2SPacket::Search(dir) = p {
+                                _ = last_search.insert(dir);
+                            }
                             game.client.send(p);
                             ready = false;
                         }
                         _ => (),
                     }
-                } else {
-                    println!("game over!");
-                    ended = true;
                 }
             }
         });

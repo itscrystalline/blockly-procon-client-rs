@@ -2,7 +2,7 @@ use std::{cmp::min, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(into = "String")]
 #[serde(from = "String")]
 pub enum Direction {
@@ -69,6 +69,7 @@ pub enum Element {
     Heart,
     Cold,
     Hot,
+    BothColdAndHot,
 }
 impl From<u8> for Element {
     fn from(value: u8) -> Self {
@@ -78,7 +79,8 @@ impl From<u8> for Element {
             2 => Element::Heart,
             3 => Element::Cold,
             4 => Element::Hot,
-            _ => unreachable!(),
+            34 | 43 => Element::BothColdAndHot,
+            n => panic!("unwhown Element {n}"),
         }
     }
 }
@@ -90,9 +92,46 @@ impl Display for Element {
             Element::Heart => "❤",
             Element::Cold => "❄",
             Element::Hot => "🔥",
+            Element::BothColdAndHot => "❄🔥",
         })
     }
 }
+
+/// WHY NOT USE THE SAME ONE??
+#[repr(u8)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(from = "u8")]
+pub enum RecElement {
+    Blank,
+    Opponent,
+    Wall,
+    Heart,
+}
+impl From<u8> for RecElement {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => RecElement::Blank,
+            1 => RecElement::Opponent,
+            2 => RecElement::Wall,
+            3 => RecElement::Heart,
+            _ => unreachable!(),
+        }
+    }
+}
+impl RecElement {
+    pub fn into_elem(self, our_side: Side) -> Element {
+        match self {
+            RecElement::Blank => Element::Blank,
+            RecElement::Opponent => match our_side {
+                Side::Hot => Element::Cold,
+                Side::Cold => Element::Hot,
+            },
+            RecElement::Wall => Element::Wall,
+            RecElement::Heart => Element::Heart,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GameData {
     pub map_data: Map,
@@ -119,8 +158,21 @@ pub struct Effect {
 #[serde(transparent)]
 pub struct Map(Vec<Vec<Element>>);
 impl Map {
+    pub fn empty(size: (usize, usize)) -> Map {
+        Map(vec![vec![Element::Blank; size.0]; size.1])
+    }
+
     pub fn at(&self, x: usize, y: usize) -> Element {
         self.0[y][x]
+    }
+    pub fn set(&mut self, x: usize, y: usize, elem: Element) -> bool {
+        let e = self.0.get_mut(y).and_then(|row| row.get_mut(x));
+        if let Some(e) = e {
+            *e = elem;
+            true
+        } else {
+            false
+        }
     }
     pub fn find_player(&self, side: Side) -> Option<(usize, usize)> {
         let to_find = match side {

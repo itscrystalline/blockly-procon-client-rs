@@ -152,6 +152,7 @@ impl eframe::App for ChaserMonitor {
                         Element::Heart => Color32::from_rgb(230, 69, 83),
                         Element::Cold => Color32::from_rgb(4, 165, 229),
                         Element::Hot => Color32::from_rgb(210, 15, 57),
+                        Element::BothColdAndHot => Color32::WHITE,
                     };
                     let border_color = match elem {
                         Element::Blank => Color32::TRANSPARENT,
@@ -159,6 +160,7 @@ impl eframe::App for ChaserMonitor {
                         Element::Heart => Color32::TRANSPARENT,
                         Element::Cold => Color32::from_rgb(4, 165, 229),
                         Element::Hot => Color32::from_rgb(210, 15, 57),
+                        Element::BothColdAndHot => Color32::TRANSPARENT,
                     };
                     let mut btn = egui::Button::new(RichText::new(elem.to_string()).color(color))
                         .stroke(Stroke::new(1.0, border_color));

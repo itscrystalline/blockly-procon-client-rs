@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use serde::{Deserialize, Serialize};
 
-use crate::game_types::{Direction, Element, GameData, Side};
+use crate::game_types::{Direction, GameData, RecElement, Side};
 
 #[derive(Debug, Serialize)]
 #[allow(dead_code)]
@@ -41,19 +41,19 @@ pub enum S2CPacket {
     UpdateBoard(GameData),
     GetReadyRec {
         #[serde(default)]
-        rec_data: Option<Vec<Element>>,
+        rec_data: Option<Vec<RecElement>>,
     },
     MoveRec {
-        rec_data: Vec<Element>,
+        rec_data: Vec<RecElement>,
     },
     LookRec {
-        rec_data: Vec<Element>,
+        rec_data: Vec<RecElement>,
     },
     SearchRec {
-        rec_data: Vec<Element>,
+        rec_data: Vec<RecElement>,
     },
     PutRec {
-        rec_data: Vec<Element>,
+        rec_data: Vec<RecElement>,
     },
 }
 

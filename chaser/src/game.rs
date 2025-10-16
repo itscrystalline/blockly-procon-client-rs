@@ -267,10 +267,10 @@ impl ChaserGame {
 
                                 let offset = match last_search {
                                     None => (0, 0),
-                                    Some(Direction::Top) => (0, -1),
-                                    Some(Direction::Bottom) => (0, 1),
-                                    Some(Direction::Left) => (-1, 0),
-                                    Some(Direction::Right) => (1, 0),
+                                    Some(Direction::Top) => (0, -2),
+                                    Some(Direction::Bottom) => (0, 2),
+                                    Some(Direction::Left) => (-2, 0),
+                                    Some(Direction::Right) => (2, 0),
                                 };
 
                                 for (i, elem) in rec_data.into_iter().enumerate() {
@@ -305,19 +305,21 @@ impl ChaserGame {
                                 let map_size = state.map_size;
                                 let map = &mut state.map;
 
-                                let range = match dir {
-                                    Direction::Top => {
-                                        pos.1.saturating_sub(9)..=pos.1.saturating_sub(1)
-                                    }
-                                    Direction::Bottom => {
-                                        min(pos.1 + 1, map_size.1)..=min(pos.1 + 9, map_size.1)
-                                    }
-                                    Direction::Left => {
-                                        pos.0.saturating_sub(9)..=pos.0.saturating_sub(1)
-                                    }
-                                    Direction::Right => {
-                                        min(pos.0 + 1, map_size.0)..=min(pos.0 + 9, map_size.0)
-                                    }
+                                let range: Vec<usize> = match dir {
+                                    Direction::Top => (pos.1.saturating_sub(9)
+                                        ..=pos.1.saturating_sub(1))
+                                        .rev()
+                                        .collect(),
+                                    Direction::Bottom => (min(pos.1 + 1, map_size.1)
+                                        ..=min(pos.1 + 9, map_size.1))
+                                        .collect(),
+                                    Direction::Left => (pos.0.saturating_sub(9)
+                                        ..=pos.0.saturating_sub(1))
+                                        .rev()
+                                        .collect(),
+                                    Direction::Right => (min(pos.0 + 1, map_size.0)
+                                        ..=min(pos.0 + 9, map_size.0))
+                                        .collect(),
                                 };
                                 let other_pos = match dir {
                                     Direction::Top | Direction::Bottom => pos.0,
@@ -366,6 +368,33 @@ impl ChaserGame {
                             }
                             if let C2SPacket::Look(dir) | C2SPacket::Search(dir) = p {
                                 _ = last_search.insert(dir);
+                            }
+                            if let C2SPacket::PutWall(dir) = p {
+                                let pos = {
+                                    let state = game.state.lock();
+                                    let size = state.map_size;
+                                    let us = (
+                                        state.players.us.pos.0 as isize,
+                                        state.players.us.pos.1 as isize,
+                                    );
+                                    let shift = match dir {
+                                        Direction::Top => (0, -1),
+                                        Direction::Bottom => (0, 1),
+                                        Direction::Left => (-1, 0),
+                                        Direction::Right => (1, 0),
+                                    };
+                                    let new_wall = (us.0 + shift.0, us.1 + shift.1);
+                                    if (0..size.0 as isize).contains(&new_wall.0)
+                                        && (0..size.1 as isize).contains(&new_wall.1)
+                                    {
+                                        Some((new_wall.0 as usize, new_wall.1 as usize))
+                                    } else {
+                                        None
+                                    }
+                                };
+                                if let Some((x, y)) = pos {
+                                    game.state.lock().map.set(x, y, Element::Wall);
+                                }
                             }
                             game.client.send(p);
                             ready = false;

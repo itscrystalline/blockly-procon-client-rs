@@ -231,6 +231,48 @@ impl Map {
         None
     }
 
+    pub fn around_8(
+        &self,
+        pos: (usize, usize),
+        size: (usize, usize),
+    ) -> Vec<(Element, (usize, usize))> {
+        let (pos_x, pos_y) = (pos.0 as isize, pos.1 as isize);
+        let mut res = vec![];
+        for o_x in -1..=1 {
+            for o_y in -1..=1 {
+                let np_x = pos_x + o_x;
+                let np_y = pos_y + o_y;
+                if (0..size.0 as isize).contains(&np_x) && (0..size.1 as isize).contains(&np_y) {
+                    let (np_x, np_y) = (np_x as usize, np_y as usize);
+                    res.push((self.at(np_x, np_y), (np_x, np_y)));
+                }
+            }
+        }
+        res
+    }
+    pub fn around_4(
+        &self,
+        pos: (usize, usize),
+        size: (usize, usize),
+    ) -> Vec<(Element, (usize, usize), Direction)> {
+        let (pos_x, pos_y) = (pos.0 as isize, pos.1 as isize);
+        let mut surrounding = vec![];
+        let potentials = [
+            (-1, 0, Direction::Left),
+            (1, 0, Direction::Right),
+            (0, -1, Direction::Top),
+            (0, 1, Direction::Bottom),
+        ];
+        for (o_x, o_y, dir) in potentials {
+            let (np_x, np_y) = (pos_x + o_x, pos_y + o_y);
+            if (0..size.0 as isize).contains(&np_x) && (0..size.1 as isize).contains(&np_y) {
+                let (np_x, np_y) = (np_x as usize, np_y as usize);
+                surrounding.push((self.at(np_x, np_y), (np_x, np_y), dir));
+            }
+        }
+        surrounding
+    }
+
     pub fn hearts_near(&self, pos: (usize, usize)) -> Vec<(usize, usize)> {
         let mut hearts = vec![];
 
@@ -280,7 +322,8 @@ impl From<String> for Side {
         match value.as_str() {
             "hot" => Side::Hot,
             "cool" => Side::Cold,
-            _ => unreachable!(),
+            "draw" => panic!("draw"),
+            e => panic!("unknown side {e}"),
         }
     }
 }

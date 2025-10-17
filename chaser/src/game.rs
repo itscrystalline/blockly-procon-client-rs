@@ -77,18 +77,18 @@ impl ChaserGame {
             name: name.clone(),
         });
 
-        let S2CPacket::JoinedRoom {
-            x_size,
-            y_size,
-            cool_name,
-            hot_name,
-        } = (loop {
-            if let Some(p) = client.recv() {
-                break p;
+        let (x_size, y_size, cool_name, hot_name) = loop {
+            if let Some(p) = client.recv()
+                && let S2CPacket::JoinedRoom {
+                    x_size,
+                    y_size,
+                    cool_name,
+                    hot_name,
+                } = p
+                && !(hot_name.contains("接続待機中") || cool_name.contains("接続待機中"))
+            {
+                break (x_size, y_size, cool_name, hot_name);
             }
-        })
-        else {
-            panic!("unexpected packet received while waiting for game data")
         };
 
         let S2CPacket::NewBoard(GameData {

@@ -44,7 +44,7 @@ fn setup_proxy(
                 let json_str =
                     String::from_utf8(std::mem::take(&mut command)).expect("incorrect string");
                 let packet = serde_json::from_str(&json_str).expect("incorrect json");
-                println!("S -> C: {packet}");
+                println!("S -> C: {packet:?}");
                 s2c_send
                     .send(packet)
                     .expect("cannot send json to main thread");

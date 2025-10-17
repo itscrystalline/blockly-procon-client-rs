@@ -212,6 +212,24 @@ impl Map {
         }
         None
     }
+
+    pub fn hearts_near(&self, pos: (usize, usize)) -> Vec<(usize, usize)> {
+        let mut hearts = vec![];
+
+        for (i, row) in self.0.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate() {
+                if val == Element::Heart {
+                    hearts.push((j, i));
+                }
+            }
+        }
+        hearts.sort_by(|&a, &b| {
+            let a_dst = pos.0.abs_diff(a.0) + pos.1.abs_diff(a.1);
+            let b_dst = pos.0.abs_diff(b.0) + pos.1.abs_diff(b.1);
+            a_dst.cmp(&b_dst)
+        });
+        hearts
+    }
 }
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(into = "String")]

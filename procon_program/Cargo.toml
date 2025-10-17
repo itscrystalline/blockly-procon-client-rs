@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 chaser = { path = "../chaser"}
+fastrand = "2.3.0"
 pathfinding = "4.14.0"

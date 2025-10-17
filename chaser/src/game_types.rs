@@ -84,6 +84,23 @@ impl From<u8> for Element {
         }
     }
 }
+impl Element {
+    pub fn to_side(self) -> Side {
+        match self {
+            Element::Hot => Side::Hot,
+            Element::Cold => Side::Cold,
+            _ => panic!("wrong"),
+        }
+    }
+}
+impl Side {
+    pub fn to_elem(self) -> Element {
+        match self {
+            Self::Hot => Element::Hot,
+            Self::Cold => Element::Cold,
+        }
+    }
+}
 impl Display for Element {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
@@ -181,7 +198,7 @@ impl Map {
         };
         for (i, row) in self.0.iter().enumerate() {
             for (j, &val) in row.iter().enumerate() {
-                if val == to_find {
+                if val == to_find || val == Element::BothColdAndHot {
                     return Some((j, i));
                 }
             }
@@ -205,7 +222,8 @@ impl Map {
 
         for i in min_x..=max_x {
             for j in min_y..=max_y {
-                if self.at(i, j) == to_find {
+                let at = self.at(i, j);
+                if at == to_find || at == Element::BothColdAndHot {
                     return Some((i, j));
                 }
             }
@@ -229,6 +247,16 @@ impl Map {
             a_dst.cmp(&b_dst)
         });
         hearts
+    }
+    pub fn deadlocked(&self) -> bool {
+        for row in self.0.iter() {
+            for &val in row.iter() {
+                if val == Element::BothColdAndHot {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]

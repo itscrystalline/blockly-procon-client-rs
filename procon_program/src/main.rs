@@ -13,6 +13,7 @@ fn pathfind_astar(handle: ChaserHandle) {
     ChaserGame::run_loop(handle, |handle| {
         let us = handle.info().players.us.pos;
         let opp = handle.info().players.opponent.pos;
+        let opp_side = handle.info().players.opponent.side;
         let size = handle.info().map_size;
         let turns_left = handle.info().turns_left;
         let map = handle.info().map.clone();
@@ -21,26 +22,42 @@ fn pathfind_astar(handle: ChaserHandle) {
             s.0.abs_diff(t.0) + s.1.abs_diff(t.1)
         }
 
-        if dist(us, opp) <= 5 {
+        if dist(us, opp) <= 5 && !map.deadlocked() {
             _ = current_target.insert(opp);
+        }
+
+        if map.deadlocked() {
+            println!("deadlocked");
+            _ = current_target.insert(loop {
+                let x = fastrand::usize(..size.0);
+                let y = fastrand::usize(..size.1);
+                if map.at(x, y) != Element::Wall {
+                    println!("going to {x}, {y}");
+                    break (x, y);
+                }
+            });
         }
 
         let target = if let Some(t) = current_target {
             t
         } else if turns_left < 80 {
+            _ = current_target.insert(opp);
             opp
         } else if let hearts = map.hearts_near(us)
             && !hearts.is_empty()
         {
+            _ = current_target.insert(*hearts.first().unwrap());
             *hearts.first().unwrap()
         } else {
-            loop {
+            let res = loop {
                 let x = fastrand::usize(..size.0);
                 let y = fastrand::usize(..size.1);
                 if map.at(x, y) != Element::Wall {
                     break (x, y);
                 }
-            }
+            };
+            _ = current_target.insert(res);
+            res
         };
 
         let mut directions = {
@@ -78,6 +95,27 @@ fn pathfind_astar(handle: ChaserHandle) {
                 vec![]
             }
         };
+
+        let mut surrounding = vec![];
+        for x in [(-1, Direction::Left), (1, Direction::Right)] {
+            if let Some(r_x) = us.0.checked_add_signed(x.0) {
+                surrounding.push((map.at(r_x, us.1), x.1));
+            }
+        }
+        for y in [(-1, Direction::Top), (1, Direction::Bottom)] {
+            if let Some(r_y) = us.1.checked_add_signed(y.0) {
+                surrounding.push((map.at(us.0, r_y), y.1));
+            }
+        }
+        for (elem, dir) in surrounding {
+            if let Element::Hot | Element::Cold = elem {
+                let elem_side = elem.to_side();
+                if elem_side == opp_side {
+                    handle.send(C2SPacket::PutWall(dir));
+                    return;
+                }
+            }
+        }
 
         if let Some(dir) = directions.pop() {
             if turns_left < 80 || dist(us, opp) < 5 {

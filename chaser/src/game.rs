@@ -310,9 +310,8 @@ impl ChaserGame {
                                 if let Some(x) = pos.0.checked_add_signed(x_offset)
                                     && let Some(y) = pos.1.checked_add_signed(y_offset)
                                 {
-                                    let map = &mut state.map;
                                     if x_offset == 0 && y_offset == 0 {
-                                        _ = map.set(
+                                        _ = state.map.set(
                                             x,
                                             y,
                                             if matches!(elem, RecElement::Opponent) {
@@ -322,13 +321,17 @@ impl ChaserGame {
                                             },
                                         );
                                     } else {
-                                        _ = map.set(x, y, elem.into_elem(side));
+                                        _ = state.map.set(x, y, elem.into_elem(side));
+                                        #[cfg(feature = "fog_of_war")]
+                                        if matches!(elem, RecElement::Opponent)
+                                            && let Some((old_x, old_y)) =
+                                                state.players.opponent.pos.replace((x, y))
+                                        {
+                                            _ = state.map.set(old_x, old_y, Element::Blank);
+                                        }
                                     }
                                 }
                             }
-
-                            state.players.opponent.pos =
-                                state.map.find_player(state.players.opponent.side);
 
                             _ = last_search.take();
                         }
@@ -372,10 +375,14 @@ impl ChaserGame {
                                         pos
                                     };
                                     _ = state.map.set(x, y, elem.into_elem(side));
+                                    #[cfg(feature = "fog_of_war")]
+                                    if matches!(elem, RecElement::Opponent)
+                                        && let Some((old_x, old_y)) =
+                                            state.players.opponent.pos.replace((x, y))
+                                    {
+                                        _ = state.map.set(old_x, old_y, Element::Blank);
+                                    }
                                 }
-
-                                state.players.opponent.pos =
-                                    state.map.find_player(state.players.opponent.side);
                             }
                             _ = last_search.take();
                         }

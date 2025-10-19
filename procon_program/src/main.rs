@@ -65,7 +65,7 @@ fn pathfind_astar(handle: ChaserHandle) {
     let mut state = TargetState::Searching;
     let mut stuck_counter = 0;
     ChaserGame::run_loop(true, handle, |handle| {
-        let (us, opp, opp_elem, size, turns_left, map) = {
+        let (us, opp, opp_elem, size, mut turns_left, map) = {
             let i = handle.info();
             #[cfg(feature = "fow")]
             {
@@ -82,7 +82,6 @@ fn pathfind_astar(handle: ChaserHandle) {
             {
                 (
                     i.players.us.pos,
-                    i.players.opponent.pos,
                     Some(i.players.opponent.pos),
                     i.players.opponent.side.to_elem(),
                     i.map_size,
@@ -108,8 +107,10 @@ fn pathfind_astar(handle: ChaserHandle) {
         if let Some((_, _, dir)) = map
             .around_4(us, size)
             .iter()
+            // .inspect(|(elem, _, dir)| println!("{elem} at {dir:?}"))
             .find(|(elem, pos, _)| *elem == opp_elem || opp.is_some_and(|opp| *pos == opp))
         {
+            println!("placing block");
             handle.send(C2SPacket::PutWall(*dir));
             return;
         }
@@ -164,6 +165,7 @@ fn pathfind_astar(handle: ChaserHandle) {
         | TargetState::FixDeadlock(target) = state
         {
             let mut directions = run_astar(&map, us, target, size, &[]);
+            // dbg!(&directions);
 
             if let Some(dir) = directions.pop() {
                 if matches!(state, TargetState::Opponent(_)) {

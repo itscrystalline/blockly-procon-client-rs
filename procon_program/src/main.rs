@@ -63,20 +63,36 @@ fn bounds_ranges(
 fn pathfind_astar(handle: ChaserHandle) {
     let mut walls = vec![];
     let mut state = TargetState::Searching;
+    let mut stuck_counter = 0;
     ChaserGame::run_loop(true, handle, |handle| {
         let (us, opp, opp_elem, size, turns_left, map) = {
             let i = handle.info();
-            (
-                i.players.us.pos,
-                i.players.opponent.pos,
-                i.players.opponent.side.to_elem(),
-                i.map_size,
-                i.turns_left,
-                i.map.clone(),
-            )
+            #[cfg(feature = "fow")]
+            {
+                (
+                    i.players.us.pos,
+                    i.players.opponent.pos,
+                    i.players.opponent.side.to_elem(),
+                    i.map_size,
+                    i.turns_left,
+                    i.map.clone(),
+                )
+            }
+            #[cfg(not(feature = "fow"))]
+            {
+                (
+                    i.players.us.pos,
+                    i.players.opponent.pos,
+                    Some(i.players.opponent.pos),
+                    i.players.opponent.side.to_elem(),
+                    i.map_size,
+                    i.turns_left,
+                    i.map.clone(),
+                )
+            }
         };
 
-        if map.deadlocked() {
+        if map.deadlocked() || opp.is_some_and(|opp| opp == us) || stuck_counter > 5 {
             println!("deadlocked");
             state = TargetState::FixDeadlock(loop {
                 let around = bounds_ranges(us, size, 2);
@@ -87,11 +103,12 @@ fn pathfind_astar(handle: ChaserHandle) {
                     break (x, y);
                 }
             });
+            stuck_counter = 0;
         }
         if let Some((_, _, dir)) = map
             .around_4(us, size)
             .iter()
-            .find(|(elem, _, _)| *elem == opp_elem)
+            .find(|(elem, pos, _)| *elem == opp_elem || opp.is_some_and(|opp| *pos == opp))
         {
             handle.send(C2SPacket::PutWall(*dir));
             return;
@@ -100,12 +117,15 @@ fn pathfind_astar(handle: ChaserHandle) {
         let hearts = viable_hearts(&map, size, map.hearts_near(us));
         match state {
             TargetState::Searching => {
-                if turns_left < CHARGE || hearts.is_empty() || dist(us, opp) < OPP_RANGE {
-                    println!("running to opp");
+                if let Some(opp) = opp
+                    && (turns_left < CHARGE || hearts.is_empty() || dist(us, opp) < OPP_RANGE)
+                {
+                    println!("running to opp {opp:?}");
                     state = TargetState::Opponent(opp);
                 } else if !hearts.is_empty() {
-                    println!("running to heart");
-                    state = TargetState::Heart(*hearts.first().unwrap());
+                    let heart = *hearts.first().unwrap();
+                    state = TargetState::Heart(heart);
+                    println!("running to heart {heart:?}");
                 } else {
                     let res = loop {
                         let x = fastrand::usize(..size.0);
@@ -120,15 +140,19 @@ fn pathfind_astar(handle: ChaserHandle) {
             }
             TargetState::Wandering(pos) | TargetState::Heart(pos) | TargetState::Opponent(pos) => {
                 if us == pos {
+                    println!("reached destination");
                     state = TargetState::Searching
                 }
-                if turns_left < CHARGE || dist(us, opp) < OPP_RANGE {
+                if let Some(opp) = opp
+                    && (turns_left < CHARGE || dist(us, opp) < OPP_RANGE)
+                {
                     println!("running to opp");
                     state = TargetState::Opponent(opp);
                 }
             }
             TargetState::FixDeadlock(pos) => {
                 if us == pos {
+                    println!("reached destination");
                     state = TargetState::Searching
                 }
             }
@@ -139,7 +163,7 @@ fn pathfind_astar(handle: ChaserHandle) {
         | TargetState::Opponent(target)
         | TargetState::FixDeadlock(target) = state
         {
-            let mut directions = run_astar(&map, us, target, size, &walls);
+            let mut directions = run_astar(&map, us, target, size, &[]);
 
             if let Some(dir) = directions.pop() {
                 if matches!(state, TargetState::Opponent(_)) {
@@ -155,7 +179,9 @@ fn pathfind_astar(handle: ChaserHandle) {
                     handle.send(C2SPacket::MovePlayer(dir));
                 }
             } else {
+                println!("reached or cannot go, searching");
                 state = TargetState::Searching;
+                stuck_counter += 1;
             }
         }
     });

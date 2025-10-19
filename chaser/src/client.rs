@@ -30,6 +30,7 @@ fn setup_proxy(
     let (s2c_send, s2c_recv) = channel::<S2CPacket>();
     let c2s_arc1 = Arc::new(Mutex::new(None));
     let c2s_arc2 = Arc::clone(&c2s_arc1);
+    let log_packets = std::env::var("LOG").is_ok_and(|v| !v.is_empty());
     // read packets from child stdout
     thread::spawn(move || {
         let mut command: Vec<u8> = vec![];
@@ -44,7 +45,9 @@ fn setup_proxy(
                 let json_str =
                     String::from_utf8(std::mem::take(&mut command)).expect("incorrect string");
                 let packet = serde_json::from_str(&json_str).expect("incorrect json");
-                println!("S -> C: {packet}");
+                if log_packets {
+                    println!("S -> C: {packet}");
+                }
                 s2c_send
                     .send(packet)
                     .expect("cannot send json to main thread");
@@ -61,7 +64,9 @@ fn setup_proxy(
                 stdin
                     .write_all(json.as_bytes())
                     .expect("cannot send packet");
-                println!("S <- C: {p}");
+                if log_packets {
+                    println!("S <- C: {p}");
+                }
             }
         }
     });

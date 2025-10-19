@@ -20,35 +20,32 @@ mod ui_enabled {
     struct ChaserMonitor(Arc<Mutex<GameState>>);
 
     pub fn start_ui(state: Arc<Mutex<GameState>>) {
-        #[cfg(feature = "ui")]
-        {
-            let env = std::env::var("NO_UI");
-            if env.is_err() {
-                thread::spawn(move || {
-                    let (room, name, opp_name) = {
-                        let info = state.lock();
-                        (
-                            info.room.clone(),
-                            info.players.us.name.clone(),
-                            info.players.opponent.name.clone(),
-                        )
-                    };
-                    let event_loop_builder: Option<EventLoopBuilderHook> =
-                        Some(Box::new(|event_loop_builder| {
-                            event_loop_builder.with_any_thread(true);
-                        }));
-                    let native_options = eframe::NativeOptions {
-                        event_loop_builder,
-                        ..Default::default()
-                    };
-                    eframe::run_native(
-                        &format!("Chaser Room '{room}': {name} vs {opp_name}"),
-                        native_options,
-                        Box::new(|_ctx| Ok(Box::new(ChaserMonitor(state)))),
+        let env = std::env::var("NO_UI");
+        if env.is_err() {
+            thread::spawn(move || {
+                let (room, name, opp_name) = {
+                    let info = state.lock();
+                    (
+                        info.room.clone(),
+                        info.players.us.name.clone(),
+                        info.players.opponent.name.clone(),
                     )
-                    .expect("egui crashed!");
-                });
-            }
+                };
+                let event_loop_builder: Option<EventLoopBuilderHook> =
+                    Some(Box::new(|event_loop_builder| {
+                        event_loop_builder.with_any_thread(true);
+                    }));
+                let native_options = eframe::NativeOptions {
+                    event_loop_builder,
+                    ..Default::default()
+                };
+                eframe::run_native(
+                    &format!("Chaser Room '{room}': {name} vs {opp_name}"),
+                    native_options,
+                    Box::new(|_ctx| Ok(Box::new(ChaserMonitor(state)))),
+                )
+                .expect("egui crashed!");
+            });
         }
     }
 

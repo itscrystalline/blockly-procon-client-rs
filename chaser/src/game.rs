@@ -12,14 +12,14 @@ use std::{
 
 use crate::{
     client::Client,
-    game_types::{Direction, Effect, Element, GameData, Map, Side},
+    game_types::{Direction, Effect, Element, GameData, Map, RecElement, Side},
     packets::{C2SPacket, S2CPacket},
     ui,
 };
 pub enum GamePhase {
     Starting,
     Turn(Side),
-    Ended { winner: Side },
+    Ended { winner: Side, reason: String },
 }
 pub struct GameState {
     pub room: String,
@@ -31,6 +31,9 @@ pub struct GameState {
     pub players: Players,
 }
 pub struct Players {
+    #[cfg(feature = "fog_of_war")]
+    pub us: OwnPlayer,
+    #[cfg(not(feature = "fog_of_war"))]
     pub us: Player,
     pub opponent: Player,
 }
@@ -47,10 +50,32 @@ impl Players {
 }
 pub struct Player {
     pub name: String,
+    #[cfg(feature = "fog_of_war")]
+    pub pos: Option<(usize, usize)>,
+    #[cfg(not(feature = "fog_of_war"))]
     pub pos: (usize, usize),
     pub score: u32,
     pub side: Side,
 }
+#[cfg(feature = "fog_of_war")]
+pub struct OwnPlayer {
+    pub name: String,
+    pub pos: (usize, usize),
+    pub score: u32,
+    pub side: Side,
+}
+#[cfg(feature = "fog_of_war")]
+impl From<OwnPlayer> for Player {
+    fn from(v: OwnPlayer) -> Self {
+        Self {
+            name: v.name,
+            pos: Some(v.pos),
+            score: v.score,
+            side: v.side,
+        }
+    }
+}
+
 pub struct ChaserGame {
     client: Client,
     state: Arc<Mutex<GameState>>,
@@ -110,6 +135,14 @@ impl ChaserGame {
         let hot_pos = map_data.find_player(Side::Hot);
         let players = if cool_name == name {
             Players {
+                #[cfg(feature = "fog_of_war")]
+                us: OwnPlayer {
+                    name: cool_name,
+                    pos: cool_pos.expect("!cool_pos"),
+                    score: cool_score,
+                    side: Side::Cold,
+                },
+                #[cfg(not(feature = "fog_of_war"))]
                 us: Player {
                     name: cool_name,
                     pos: cool_pos.expect("!cool_pos"),
@@ -118,6 +151,9 @@ impl ChaserGame {
                 },
                 opponent: Player {
                     name: hot_name,
+                    #[cfg(feature = "fog_of_war")]
+                    pos: None,
+                    #[cfg(not(feature = "fog_of_war"))]
                     pos: hot_pos.expect("!hot_pos"),
                     score: hot_score,
                     side: Side::Hot,
@@ -125,6 +161,14 @@ impl ChaserGame {
             }
         } else if hot_name == name {
             Players {
+                #[cfg(feature = "fog_of_war")]
+                us: OwnPlayer {
+                    name: hot_name,
+                    pos: hot_pos.expect("!hot_pos"),
+                    score: hot_score,
+                    side: Side::Hot,
+                },
+                #[cfg(not(feature = "fog_of_war"))]
                 us: Player {
                     name: hot_name,
                     pos: hot_pos.expect("!hot_pos"),
@@ -133,6 +177,9 @@ impl ChaserGame {
                 },
                 opponent: Player {
                     name: cool_name,
+                    #[cfg(feature = "fog_of_war")]
+                    pos: None,
+                    #[cfg(not(feature = "fog_of_war"))]
                     pos: cool_pos.expect("!cool_pos"),
                     score: cool_score,
                     side: Side::Cold,
@@ -144,11 +191,10 @@ impl ChaserGame {
 
         let state = Arc::new(Mutex::new(GameState {
             room: map.clone(),
-            map: if cfg!(feature = "fog_of_war") {
-                Map::empty((x_size, y_size))
-            } else {
-                map_data.clone()
-            },
+            #[cfg(feature = "fog_of_war")]
+            map: Map::empty((x_size, y_size)),
+            #[cfg(not(feature = "fog_of_war"))]
+            map: map_data.clone(),
             map_size: (x_size, y_size),
             turns_left: turn,
             phase: GamePhase::Starting,
@@ -180,11 +226,14 @@ impl ChaserGame {
                 }
                 if let Some(p) = game.client.recv() {
                     match p {
-                        S2CPacket::GameResult { winner, .. } => {
-                            game.state.lock().phase = GamePhase::Ended { winner }
+                        S2CPacket::GameResult { winner, info } => {
+                            game.state.lock().phase = GamePhase::Ended {
+                                winner,
+                                reason: info,
+                            }
                         }
                         S2CPacket::UpdateBoard(GameData {
-                            mut map_data,
+                            map_data,
                             cool_score,
                             hot_score,
                             turn,
@@ -196,57 +245,41 @@ impl ChaserGame {
                             if let Some(Effect { player, .. }) = effect {
                                 state.phase = GamePhase::Turn(player);
 
-                                let p = if player == state.players.us.side {
-                                    &mut state.players.us
-                                } else {
-                                    &mut state.players.opponent
-                                };
-                                let old_pos = p.pos;
-                                if let Some(pos) =
-                                    map_data.find_player_around(player, old_pos, size)
-                                {
-                                    p.pos = pos;
-                                    if cfg!(feature = "fog_of_war") {
-                                        map_data.set(
-                                            pos.0,
-                                            pos.1,
-                                            match p.side {
-                                                Side::Hot => Element::Hot,
-                                                Side::Cold => Element::Cold,
-                                            },
-                                        );
-                                    }
-                                }
-
                                 if player != state.players.us.side {
                                     game.client.send(C2SPacket::GetReady);
                                     ready = false;
                                 }
                             }
 
-                            if cfg!(not(feature = "fog_of_war")) {
+                            #[cfg(not(feature = "fog_of_war"))]
+                            {
+                                let us = state.players.us.pos;
+                                let opp = state.players.opponent.pos;
+                                let new_us =
+                                    map_data.find_player_around(state.players.us.side, us, size);
+                                let new_opp = map_data.find_player_around(
+                                    state.players.opponent.side,
+                                    opp,
+                                    size,
+                                );
                                 state.map = map_data;
-                            } else {
+                                if let Some(new_us) = new_us {
+                                    state.players.us.pos = new_us;
+                                }
+                                if let Some(new_opp) = new_opp {
+                                    state.players.opponent.pos = new_opp;
+                                }
+                            }
+                            #[cfg(feature = "fog_of_war")]
+                            {
                                 let us = state.players.us.pos;
                                 let us_side = state.players.us.side;
-                                let opp = state.players.opponent.pos;
-                                let opp_side = state.players.opponent.side;
-                                state.map.set(
-                                    us.0,
-                                    us.1,
-                                    match us_side {
-                                        Side::Hot => Element::Hot,
-                                        Side::Cold => Element::Cold,
-                                    },
-                                );
-                                state.map.set(
-                                    opp.0,
-                                    opp.1,
-                                    match opp_side {
-                                        Side::Hot => Element::Hot,
-                                        Side::Cold => Element::Cold,
-                                    },
-                                );
+                                let new_us = map_data
+                                    .find_player_around(state.players.us.side, us, size)
+                                    .expect("player moved >2 blocks or was killed");
+                                state.players.us.pos = new_us;
+                                state.map.set(us.0, us.1, Element::Blank);
+                                state.map.set(new_us.0, new_us.1, us_side.to_elem());
                             }
                             state.turns_left = turn;
                             state.effect = effect;
@@ -259,51 +292,52 @@ impl ChaserGame {
                         S2CPacket::MoveRec { rec_data }
                         | S2CPacket::PutRec { rec_data }
                         | S2CPacket::LookRec { rec_data } => {
-                            if cfg!(feature = "fog_of_war") {
-                                let mut state = game.state.lock();
-                                let pos = state.players.us.pos;
-                                let side = state.players.us.side;
-                                let map = &mut state.map;
+                            let mut state = game.state.lock();
+                            let pos = state.players.us.pos;
+                            let side = state.players.us.side;
 
-                                let offset = match last_search {
-                                    None => (0, 0),
-                                    Some(Direction::Top) => (0, -2),
-                                    Some(Direction::Bottom) => (0, 2),
-                                    Some(Direction::Left) => (-2, 0),
-                                    Some(Direction::Right) => (2, 0),
-                                };
+                            let offset = match last_search {
+                                None => (0, 0),
+                                Some(Direction::Top) => (0, -2),
+                                Some(Direction::Bottom) => (0, 2),
+                                Some(Direction::Left) => (-2, 0),
+                                Some(Direction::Right) => (2, 0),
+                            };
 
-                                for (i, elem) in rec_data.into_iter().enumerate() {
-                                    let x_offset = (i % 3) as isize - 1 + offset.0;
-                                    let y_offset = (i / 3) as isize - 1 + offset.1;
-                                    if let Some(x) = pos.0.checked_add_signed(x_offset)
-                                        && let Some(y) = pos.1.checked_add_signed(y_offset)
-                                    {
-                                        if x_offset == 0 && y_offset == 0 {
-                                            _ = map.set(
-                                                x,
-                                                y,
-                                                match side {
-                                                    Side::Hot => Element::Hot,
-                                                    Side::Cold => Element::Cold,
-                                                },
-                                            );
-                                        } else {
-                                            _ = map.set(x, y, elem.into_elem(side));
-                                        }
+                            for (i, elem) in rec_data.into_iter().enumerate() {
+                                let x_offset = (i % 3) as isize - 1 + offset.0;
+                                let y_offset = (i / 3) as isize - 1 + offset.1;
+                                if let Some(x) = pos.0.checked_add_signed(x_offset)
+                                    && let Some(y) = pos.1.checked_add_signed(y_offset)
+                                {
+                                    let map = &mut state.map;
+                                    if x_offset == 0 && y_offset == 0 {
+                                        _ = map.set(
+                                            x,
+                                            y,
+                                            if matches!(elem, RecElement::Opponent) {
+                                                Element::BothColdAndHot
+                                            } else {
+                                                side.to_elem()
+                                            },
+                                        );
+                                    } else {
+                                        _ = map.set(x, y, elem.into_elem(side));
                                     }
                                 }
-
-                                _ = last_search.take();
                             }
+
+                            state.players.opponent.pos =
+                                state.map.find_player(state.players.opponent.side);
+
+                            _ = last_search.take();
                         }
-                        S2CPacket::SearchRec { rec_data } if cfg!(feature = "fog_of_war") => {
+                        S2CPacket::SearchRec { rec_data } => {
                             if let Some(dir) = last_search {
                                 let mut state = game.state.lock();
                                 let pos = state.players.us.pos;
                                 let side = state.players.us.side;
                                 let map_size = state.map_size;
-                                let map = &mut state.map;
 
                                 let range: Vec<usize> = match dir {
                                     Direction::Top => (pos.1.saturating_sub(9)
@@ -326,11 +360,7 @@ impl ChaserGame {
                                     Direction::Left | Direction::Right => pos.1,
                                 };
 
-                                for (i, (elem, pos)) in rec_data.into_iter().zip(range).enumerate()
-                                {
-                                    if i == 5 {
-                                        continue;
-                                    }
+                                for (elem, pos) in rec_data.into_iter().zip(range) {
                                     let x = if matches!(dir, Direction::Top | Direction::Bottom) {
                                         other_pos
                                     } else {
@@ -341,8 +371,11 @@ impl ChaserGame {
                                     } else {
                                         pos
                                     };
-                                    _ = map.set(x, y, elem.into_elem(side));
+                                    _ = state.map.set(x, y, elem.into_elem(side));
                                 }
+
+                                state.players.opponent.pos =
+                                    state.map.find_player(state.players.opponent.side);
                             }
                             _ = last_search.take();
                         }
@@ -350,10 +383,10 @@ impl ChaserGame {
                     }
                 }
                 // send any pending packet
-                if let GamePhase::Ended { winner } = game.state.lock().phase {
-                    println!("game over! {winner:?} won!");
+                if let GamePhase::Ended { winner, reason } = &game.state.lock().phase {
+                    println!("game over! {winner:?} won! ({reason})");
                     println!("we are {our_side:?}");
-                    ended = Some(winner);
+                    ended = Some(*winner);
                 } else {
                     match c2s_arc1.lock().take() {
                         Some(p) if ready => {
@@ -418,7 +451,6 @@ impl ChaserGame {
             // wait a bit for sync
             thread::sleep(Duration::from_millis(50));
             if !matches!(handle.info().phase, GamePhase::Ended { .. }) {
-                println!("running");
                 f(&handle)
             } else if quit {
                 break;

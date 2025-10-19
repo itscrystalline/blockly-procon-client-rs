@@ -63,7 +63,7 @@ fn bounds_ranges(
 fn pathfind_astar(handle: ChaserHandle) {
     let mut walls = vec![];
     let mut state = TargetState::Searching;
-    ChaserGame::run_loop(handle, |handle| {
+    ChaserGame::run_loop(true, handle, |handle| {
         let (us, opp, opp_elem, size, turns_left, map) = {
             let i = handle.info();
             (

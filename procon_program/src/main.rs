@@ -115,6 +115,12 @@ fn pathfind_astar(handle: ChaserHandle) {
             return;
         }
 
+        let scan_chance = if turns_left < 50 { 3 } else { 1 };
+        if fastrand::usize(0..10) < scan_chance {
+            random_scan(handle, size, us);
+            turns_left -= 1;
+        }
+
         let hearts = viable_hearts(&map, size, map.hearts_near(us));
         match state {
             TargetState::Searching => {
@@ -139,7 +145,7 @@ fn pathfind_astar(handle: ChaserHandle) {
                     state = TargetState::Wandering(res);
                 }
             }
-            TargetState::Wandering(pos) | TargetState::Heart(pos) | TargetState::Opponent(pos) => {
+            TargetState::Wandering(pos) => {
                 if us == pos {
                     println!("reached destination");
                     state = TargetState::Searching
@@ -149,6 +155,25 @@ fn pathfind_astar(handle: ChaserHandle) {
                 {
                     println!("running to opp");
                     state = TargetState::Opponent(opp);
+                }
+            }
+            TargetState::Heart(pos) => {
+                if us == pos {
+                    println!("reached destination");
+                    state = TargetState::Searching
+                }
+                if let Some(opp) = opp
+                    && (turns_left < CHARGE || dist(us, opp) < OPP_RANGE)
+                {
+                    println!("running to opp");
+                    state = TargetState::Opponent(opp);
+                }
+            }
+
+            TargetState::Opponent(pos) => {
+                if us == pos {
+                    println!("reached destination");
+                    state = TargetState::Searching
                 }
             }
             TargetState::FixDeadlock(pos) => {
@@ -187,6 +212,64 @@ fn pathfind_astar(handle: ChaserHandle) {
             }
         }
     });
+}
+
+fn random_scan(handle: &ChaserHandle, size: Point, pos: Point) {
+    let (half_x, half_y) = (size.0 / 2, size.1 / 2);
+    let area_or_line = fastrand::bool();
+    let dir1_or_dir2 = fastrand::bool();
+    // let (odd_x, odd_y) = (size.0 % 2 == 0, size.1 % 2 == 0);
+    if (0..half_x).contains(&pos.0) {
+        if (0..half_y).contains(&pos.1) {
+            // top left
+            let dir = if dir1_or_dir2 {
+                Direction::Bottom
+            } else {
+                Direction::Right
+            };
+            handle.send(if area_or_line {
+                C2SPacket::Look(dir)
+            } else {
+                C2SPacket::Search(dir)
+            });
+        } else {
+            // top right
+            let dir = if dir1_or_dir2 {
+                Direction::Bottom
+            } else {
+                Direction::Left
+            };
+            handle.send(if area_or_line {
+                C2SPacket::Look(dir)
+            } else {
+                C2SPacket::Search(dir)
+            });
+        }
+    } else if (0..half_y).contains(&pos.1) {
+        // bottom left
+        let dir = if dir1_or_dir2 {
+            Direction::Top
+        } else {
+            Direction::Right
+        };
+        handle.send(if area_or_line {
+            C2SPacket::Look(dir)
+        } else {
+            C2SPacket::Search(dir)
+        });
+    } else {
+        // bottom right
+        let dir = if dir1_or_dir2 {
+            Direction::Top
+        } else {
+            Direction::Left
+        };
+        handle.send(if area_or_line {
+            C2SPacket::Look(dir)
+        } else {
+            C2SPacket::Search(dir)
+        });
+    }
 }
 
 fn run_astar(

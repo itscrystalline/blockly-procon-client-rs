@@ -176,7 +176,7 @@ impl ChaserGame {
             loop {
                 thread::sleep(Duration::from_millis(10));
                 if ended.is_some() {
-                    continue;
+                    break;
                 }
                 if let Some(p) = game.client.recv() {
                     match p {
@@ -413,12 +413,15 @@ impl ChaserGame {
     }
 
     #[inline]
-    pub fn run_loop(handle: ChaserHandle, mut f: impl FnMut(&ChaserHandle)) {
+    pub fn run_loop(quit: bool, handle: ChaserHandle, mut f: impl FnMut(&ChaserHandle)) {
         loop {
             // wait a bit for sync
             thread::sleep(Duration::from_millis(50));
             if !matches!(handle.info().phase, GamePhase::Ended { .. }) {
+                println!("running");
                 f(&handle)
+            } else if quit {
+                break;
             }
         }
     }

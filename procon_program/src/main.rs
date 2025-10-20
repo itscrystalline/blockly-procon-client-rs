@@ -108,15 +108,18 @@ fn pathfind_astar(handle: ChaserHandle) {
             .around_4(us, size)
             .iter()
             // .inspect(|(elem, _, dir)| println!("{elem} at {dir:?}"))
-            .find(|(elem, pos, _)| *elem == opp_elem || opp.is_some_and(|opp| *pos == opp))
+            .find(|(elem, pos, _)| *elem == opp_elem)
         {
             println!("placing block");
             handle.send(C2SPacket::PutWall(*dir));
             return;
         }
 
+        #[cfg(not(feature = "fow"))]
         let scan_chance = if turns_left < 50 { 3 } else { 1 };
-        if fastrand::usize(0..10) < scan_chance {
+        #[cfg(feature = "fow")]
+        let scan_chance = if turns_left < 50 { 30 } else { 10 };
+        if fastrand::usize(0..100) < scan_chance {
             random_scan(handle, size, us);
             turns_left -= 1;
         }
@@ -189,7 +192,7 @@ fn pathfind_astar(handle: ChaserHandle) {
         | TargetState::Opponent(target)
         | TargetState::FixDeadlock(target) = state
         {
-            let mut directions = run_astar(&map, us, target, size, &[]);
+            let mut directions = run_astar(&map, us, target, size, &walls);
             // dbg!(&directions);
 
             if let Some(dir) = directions.pop() {

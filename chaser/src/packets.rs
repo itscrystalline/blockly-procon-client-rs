@@ -25,6 +25,8 @@ pub enum C2SPacket {
 #[allow(dead_code)]
 #[serde(rename_all = "snake_case", tag = "packet", content = "data")]
 pub enum S2CPacket {
+    Error(String),
+    ConnectError(String),
     JoinedRoom {
         x_size: usize,
         y_size: usize,
@@ -41,18 +43,22 @@ pub enum S2CPacket {
     UpdateBoard(GameData),
     GetReadyRec {
         #[serde(default)]
-        rec_data: Option<Vec<RecElement>>,
+        rec_data: Vec<RecElement>,
     },
     MoveRec {
+        #[serde(default)]
         rec_data: Vec<RecElement>,
     },
     LookRec {
+        #[serde(default)]
         rec_data: Vec<RecElement>,
     },
     SearchRec {
+        #[serde(default)]
         rec_data: Vec<RecElement>,
     },
     PutRec {
+        #[serde(default)]
         rec_data: Vec<RecElement>,
     },
 }
@@ -60,12 +66,12 @@ pub enum S2CPacket {
 impl Display for C2SPacket {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
-            C2SPacket::PlayerJoin { .. } => "PlayerJoin",
-            C2SPacket::GetReady => "GetReady",
-            C2SPacket::MovePlayer(_) => "MovePlayer",
-            C2SPacket::Look(_) => "Look",
-            C2SPacket::Search(_) => "Search",
-            C2SPacket::PutWall(_) => "PutWall",
+            C2SPacket::PlayerJoin { .. } => "PlayerJoin".to_string(),
+            C2SPacket::GetReady => "GetReady".to_string(),
+            C2SPacket::MovePlayer(dir) => format!("MovePlayer: {dir:?}"),
+            C2SPacket::Look(dir) => format!("Look: {dir:?}"),
+            C2SPacket::Search(dir) => format!("Search: {dir:?}"),
+            C2SPacket::PutWall(dir) => format!("PutWall: {dir:?}"),
         };
         write!(f, "{name}")
     }
@@ -74,15 +80,17 @@ impl Display for C2SPacket {
 impl fmt::Display for S2CPacket {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
-            S2CPacket::JoinedRoom { .. } => "JoinedRoom",
-            S2CPacket::GameResult { .. } => "GameResult",
-            S2CPacket::NewBoard(_) => "NewBoard",
-            S2CPacket::UpdateBoard(_) => "UpdateBoard",
-            S2CPacket::GetReadyRec { .. } => "GetReadyRec",
-            S2CPacket::MoveRec { .. } => "MoveRec",
-            S2CPacket::LookRec { .. } => "LookRec",
-            S2CPacket::SearchRec { .. } => "SearchRec",
-            S2CPacket::PutRec { .. } => "PutRec",
+            S2CPacket::JoinedRoom { .. } => "JoinedRoom".to_string(),
+            S2CPacket::GameResult { .. } => "GameResult".to_string(),
+            S2CPacket::NewBoard(_) => "NewBoard".to_string(),
+            S2CPacket::UpdateBoard(_) => "UpdateBoard".to_string(),
+            S2CPacket::GetReadyRec { .. } => "GetReadyRec".to_string(),
+            S2CPacket::MoveRec { .. } => "MoveRec".to_string(),
+            S2CPacket::LookRec { .. } => "LookRec".to_string(),
+            S2CPacket::SearchRec { .. } => "SearchRec".to_string(),
+            S2CPacket::PutRec { .. } => "PutRec".to_string(),
+            S2CPacket::Error(info) => format!("Error: {info}"),
+            S2CPacket::ConnectError(info) => format!("ConnectError: {info}"),
         };
         write!(f, "{name}")
     }

@@ -19,7 +19,7 @@ pub struct Client {
 }
 impl Default for Client {
     fn default() -> Self {
-        Self::with_server("http://localhost:3000")
+        Self::with_server("http://localhost:3000", SocketIo::Two)
     }
 }
 
@@ -60,6 +60,7 @@ fn setup_proxy(
         loop {
             if let Some(p) = c2s_arc1.lock().take() {
                 let mut json = serde_json::to_string(&p).expect("cannot encode packet");
+                // println!("{json}");
                 json.push('\n');
                 stdin
                     .write_all(json.as_bytes())
@@ -74,13 +75,25 @@ fn setup_proxy(
     (s2c_recv, c2s_arc2)
 }
 
+pub enum SocketIo {
+    Two,
+    Four,
+}
+
 impl Client {
-    pub fn with_server(server: impl AsRef<OsStr>) -> Self {
+    pub fn with_server(server: impl AsRef<OsStr>, socketio_version: SocketIo) -> Self {
         let mut proxy = Command::new("bun")
             .args(["run", "proxy.ts"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .env("SERVER", server)
+            .env(
+                "MODERN",
+                match socketio_version {
+                    SocketIo::Two => "",
+                    SocketIo::Four => "1",
+                },
+            )
             .spawn()
             .expect("cannot spawn proxy");
 

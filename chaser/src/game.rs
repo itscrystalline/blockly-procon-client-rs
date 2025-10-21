@@ -1,14 +1,5 @@
 use parking_lot::{Mutex, MutexGuard};
-use std::{
-    cmp::min,
-    ffi::OsStr,
-    sync::{
-        Arc,
-        mpsc::{Receiver, channel},
-    },
-    thread,
-    time::Duration,
-};
+use std::{cmp::min, ffi::OsStr, sync::Arc, thread, time::Duration};
 
 use crate::{
     client::{Client, SocketIo},
@@ -16,6 +7,7 @@ use crate::{
     packets::{C2SPacket, S2CPacket},
     ui,
 };
+#[derive(Debug, Clone)]
 pub enum GamePhase {
     Starting,
     Turn(Side),
@@ -83,7 +75,6 @@ pub struct ChaserGame {
 pub struct ChaserHandle {
     state: Arc<Mutex<GameState>>,
     send: Arc<Mutex<Option<C2SPacket>>>,
-    ready: Receiver<()>,
 }
 impl ChaserGame {
     pub fn join(name: impl ToString, map: impl ToString) -> ChaserHandle {
@@ -217,7 +208,6 @@ impl ChaserGame {
 
         let c2s_arc1 = Arc::new(Mutex::new(None));
         let c2s_arc2 = Arc::clone(&c2s_arc1);
-        let (ready_send, ready_recv) = channel::<()>();
 
         ui::start_ui(state3);
 
@@ -249,7 +239,6 @@ impl ChaserGame {
                             effect,
                         }) => {
                             let mut state = game.state.lock();
-                            let size = state.map_size;
 
                             if let Some(Effect { player, .. }) = effect {
                                 state.phase = GamePhase::Turn(player);
@@ -262,15 +251,8 @@ impl ChaserGame {
 
                             #[cfg(not(feature = "fog_of_war"))]
                             {
-                                let us = state.players.us.pos;
-                                let opp = state.players.opponent.pos;
-                                let new_us =
-                                    map_data.find_player_around(state.players.us.side, us, size);
-                                let new_opp = map_data.find_player_around(
-                                    state.players.opponent.side,
-                                    opp,
-                                    size,
-                                );
+                                let new_us = map_data.find_player(state.players.us.side);
+                                let new_opp = map_data.find_player(state.players.opponent.side);
                                 state.map = map_data;
                                 if let Some(new_us) = new_us {
                                     state.players.us.pos = new_us;
@@ -284,7 +266,7 @@ impl ChaserGame {
                                 let us = state.players.us.pos;
                                 let us_side = state.players.us.side;
                                 let new_us = map_data
-                                    .find_player_around(state.players.us.side, us, size)
+                                    .find_player(state.players.us.side)
                                     .expect("player moved >2 blocks or was killed");
                                 state.players.us.pos = new_us;
                                 state.map.set(us.0, us.1, Element::Blank);
@@ -297,7 +279,6 @@ impl ChaserGame {
                         S2CPacket::GetReadyRec { rec_data } => {
                             let mut state = game.state.lock();
                             let pos = state.players.us.pos;
-                            let size = state.map_size;
                             let side = state.players.us.side;
 
                             #[cfg(feature = "fog_of_war")]
@@ -338,7 +319,7 @@ impl ChaserGame {
                             } else if let Some(old) = state.players.opponent.pos
                                 && state
                                     .map
-                                    .around_8(pos, size)
+                                    .around_8(pos, state.map_size)
                                     .iter()
                                     .any(|(_, pos)| *pos == old)
                             {
@@ -347,14 +328,12 @@ impl ChaserGame {
                             }
 
                             ready = true;
-                            ready_send.send(()).expect("channel closed");
                         }
                         S2CPacket::MoveRec { rec_data }
                         | S2CPacket::PutRec { rec_data }
                         | S2CPacket::LookRec { rec_data } => {
                             let mut state = game.state.lock();
                             let pos = state.players.us.pos;
-                            let size = state.map_size;
                             let side = state.players.us.side;
 
                             let offset = match last_search {
@@ -403,7 +382,7 @@ impl ChaserGame {
                             } else if let Some(old) = state.players.opponent.pos
                                 && state
                                     .map
-                                    .around_8(pos, size)
+                                    .around_8(pos, state.map_size)
                                     .iter()
                                     .any(|(_, pos)| *pos == old)
                             {
@@ -418,7 +397,6 @@ impl ChaserGame {
                                 let mut state = game.state.lock();
                                 let pos = state.players.us.pos;
                                 let side = state.players.us.side;
-                                let size = state.map_size;
                                 let map_size = state.map_size;
 
                                 let range: Vec<usize> = match dir {
@@ -472,7 +450,7 @@ impl ChaserGame {
                                 } else if let Some(old) = state.players.opponent.pos
                                     && state
                                         .map
-                                        .around_8(pos, size)
+                                        .around_8(pos, map_size)
                                         .iter()
                                         .any(|(_, pos)| *pos == old)
                                 {
@@ -505,6 +483,8 @@ impl ChaserGame {
                             }
                             if let C2SPacket::Look(dir) | C2SPacket::Search(dir) = p {
                                 _ = last_search.insert(dir);
+                            } else {
+                                _ = last_search.take();
                             }
                             if let C2SPacket::PutWall(dir) = p {
                                 let pos = {
@@ -545,7 +525,6 @@ impl ChaserGame {
         ChaserHandle {
             state: state2,
             send: c2s_arc2,
-            ready: ready_recv,
         }
     }
 
@@ -567,7 +546,6 @@ impl ChaserHandle {
         self.state.lock()
     }
     pub fn send(&self, packet: C2SPacket) {
-        self.ready.recv().expect("channel closed");
         _ = self.send.lock().insert(packet);
     }
 }

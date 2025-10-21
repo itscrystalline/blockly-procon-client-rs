@@ -64,6 +64,7 @@ fn pathfind_astar(handle: ChaserHandle) {
     let mut walls = vec![];
     let mut state = TargetState::Searching;
     let mut stuck_counter = 0;
+    let mut skip_counter = 0;
     ChaserGame::run_loop(true, handle, |handle| {
         let (us, opp, opp_elem, size, mut turns_left, map) = {
             let i = handle.info();
@@ -91,6 +92,10 @@ fn pathfind_astar(handle: ChaserHandle) {
             }
         };
 
+        fn go_for_opp(turns_left: u32, us: Point, opp: Point) -> bool {
+            turns_left < CHARGE || dist(us, opp) < OPP_RANGE
+        }
+
         if map.deadlocked() || opp.is_some_and(|opp| opp == us) || stuck_counter > 5 {
             println!("deadlocked");
             state = TargetState::FixDeadlock(loop {
@@ -104,13 +109,12 @@ fn pathfind_astar(handle: ChaserHandle) {
             });
             stuck_counter = 0;
         }
-        if let Some((_, _, dir)) = map
+        if let Some((_, pos, dir)) = map
             .around_4(us, size)
             .iter()
-            // .inspect(|(elem, _, dir)| println!("{elem} at {dir:?}"))
-            .find(|(elem, pos, _)| *elem == opp_elem)
+            .find(|(elem, _, _)| *elem == opp_elem)
         {
-            println!("placing block");
+            println!("placing block on opp at {pos:?} ({dir:?})");
             handle.send(C2SPacket::PutWall(*dir));
             return;
         }
@@ -128,7 +132,7 @@ fn pathfind_astar(handle: ChaserHandle) {
         match state {
             TargetState::Searching => {
                 if let Some(opp) = opp
-                    && (turns_left < CHARGE || hearts.is_empty() || dist(us, opp) < OPP_RANGE)
+                    && (hearts.is_empty() || go_for_opp(turns_left, us, opp))
                 {
                     println!("running to opp {opp:?}");
                     state = TargetState::Opponent(opp);
@@ -148,35 +152,16 @@ fn pathfind_astar(handle: ChaserHandle) {
                     state = TargetState::Wandering(res);
                 }
             }
-            TargetState::Wandering(pos) => {
+            TargetState::Wandering(pos) | TargetState::Heart(pos) | TargetState::Opponent(pos) => {
                 if us == pos {
                     println!("reached destination");
                     state = TargetState::Searching
                 }
                 if let Some(opp) = opp
-                    && (turns_left < CHARGE || dist(us, opp) < OPP_RANGE)
+                    && go_for_opp(turns_left, us, opp)
                 {
                     println!("running to opp");
                     state = TargetState::Opponent(opp);
-                }
-            }
-            TargetState::Heart(pos) => {
-                if us == pos {
-                    println!("reached destination");
-                    state = TargetState::Searching
-                }
-                if let Some(opp) = opp
-                    && (turns_left < CHARGE || dist(us, opp) < OPP_RANGE)
-                {
-                    println!("running to opp");
-                    state = TargetState::Opponent(opp);
-                }
-            }
-
-            TargetState::Opponent(pos) => {
-                if us == pos {
-                    println!("reached destination");
-                    state = TargetState::Searching
                 }
             }
             TargetState::FixDeadlock(pos) => {
@@ -193,14 +178,19 @@ fn pathfind_astar(handle: ChaserHandle) {
         | TargetState::FixDeadlock(target) = state
         {
             let mut directions = run_astar(&map, us, target, size, &walls);
-            // dbg!(&directions);
+            // println!("{directions:?}");
 
             if let Some(dir) = directions.pop() {
                 if matches!(state, TargetState::Opponent(_)) {
                     if directions.is_empty() {
                         handle.send(C2SPacket::PutWall(dir));
+                    } else if directions.len() == 1 && skip_counter < 3 {
+                        println!("skipping");
+                        skip_counter += 1;
+                        handle.send(C2SPacket::Search(Direction::Top));
                     } else {
                         handle.send(C2SPacket::MovePlayer(dir));
+                        skip_counter = 0;
                     }
                 } else {
                     if directions.is_empty() && matches!(state, TargetState::Heart(_)) {

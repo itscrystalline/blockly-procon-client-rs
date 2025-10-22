@@ -466,8 +466,11 @@ impl ChaserGame {
                 }
                 // send any pending packet
                 if let GamePhase::Ended { winner, reason } = &game.state.lock().phase {
-                    println!("game over! {winner:?} won! ({reason})");
-                    println!("we are {our_side:?}");
+                    if our_side == *winner {
+                        println!("We ({winner:?}) won! ({reason})");
+                    } else {
+                        println!("game over! We ({winner:?}) lost! ({reason})");
+                    }
                     ended = Some(*winner);
                 } else {
                     match c2s_arc1.lock().take() {

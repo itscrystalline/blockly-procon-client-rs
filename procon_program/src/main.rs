@@ -2,6 +2,7 @@
 
 use std::{cmp::min, ops::RangeInclusive};
 
+use argh::FromArgs;
 use chaser::{
     game::{ChaserGame, ChaserHandle},
     game_types::{Direction, Element, Map},
@@ -9,17 +10,28 @@ use chaser::{
 };
 use pathfinding::prelude::astar;
 
-const CHARGE: u32 = 40;
+const CHARGE: u32 = 50;
 const OPP_RANGE: usize = 5;
 
 type Point = (usize, usize);
 
+#[derive(FromArgs)]
+/// Options for the client.
+struct Options {
+    /// room name
+    #[argh(option)]
+    room: Option<String>,
+    /// player name
+    #[argh(option)]
+    name: Option<String>,
+    /// server url
+    #[argh(option)]
+    server: Option<String>,
+}
+
 fn main() {
-    let mut args = std::env::args();
-    _ = args.next();
-    let room = args.next();
-    let name = args.next();
-    let server = args.next();
+    let Options { room, name, server } = argh::from_env();
+
     let handle = if let Some(server) = server {
         ChaserGame::join_url(
             server,
@@ -119,10 +131,7 @@ fn pathfind_astar(handle: ChaserHandle) {
             return;
         }
 
-        #[cfg(not(feature = "fow"))]
-        let scan_chance = if turns_left < 50 { 3 } else { 1 };
-        #[cfg(feature = "fow")]
-        let scan_chance = if turns_left < 50 { 30 } else { 10 };
+        let scan_chance = if turns_left < CHARGE { 75 } else { 50 };
         if fastrand::usize(0..100) < scan_chance {
             random_scan(handle, size, us);
             turns_left -= 1;
@@ -136,7 +145,9 @@ fn pathfind_astar(handle: ChaserHandle) {
                 {
                     println!("running to opp {opp:?}");
                     state = TargetState::Opponent(opp);
-                } else if !hearts.is_empty() {
+                } else if !hearts.is_empty()
+                    && (cfg!(feature = "fow") || fastrand::usize(0..10) > 3)
+                {
                     let heart = *hearts.first().unwrap();
                     state = TargetState::Heart(heart);
                     println!("running to heart {heart:?}");
@@ -177,7 +188,18 @@ fn pathfind_astar(handle: ChaserHandle) {
         | TargetState::Opponent(target)
         | TargetState::FixDeadlock(target) = state
         {
-            let mut directions = run_astar(&map, us, target, size, &walls);
+            let mut directions =
+                if matches!(state, TargetState::Heart(_) | TargetState::Wandering(_)) {
+                    run_astar(&map, us, target, size, &walls, |pos| {
+                        if let Some(opp) = opp {
+                            (size.0 + size.1) - dist(pos, opp)
+                        } else {
+                            1
+                        }
+                    })
+                } else {
+                    run_astar(&map, us, target, size, &walls, |_| 1)
+                };
             // println!("{directions:?}");
 
             if let Some(dir) = directions.pop() {
@@ -271,6 +293,7 @@ fn run_astar(
     dest: Point,
     size: Point,
     blacklisted: &[Point],
+    cost_fn: impl Fn(Point) -> usize,
 ) -> Vec<Direction> {
     let res = astar(
         &src,
@@ -280,7 +303,7 @@ fn run_astar(
 
             options
                 .into_iter()
-                .map(|(_, pos, _)| (pos, 1))
+                .map(|(_, pos, _)| (pos, cost_fn(pos)))
                 .collect::<Vec<_>>()
         },
         |&(x, y)| dest.0.abs_diff(x) + dest.1.abs_diff(y),

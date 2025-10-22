@@ -82,20 +82,24 @@ pub enum SocketIo {
 
 impl Client {
     pub fn with_server(server: impl AsRef<OsStr>, socketio_version: SocketIo) -> Self {
-        let mut proxy = Command::new("bun")
-            .args(["run", "proxy.ts"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .env("SERVER", server)
-            .env(
-                "MODERN",
-                match socketio_version {
-                    SocketIo::Two => "",
-                    SocketIo::Four => "1",
-                },
-            )
-            .spawn()
-            .expect("cannot spawn proxy");
+        let mut proxy = Command::new(
+            #[cfg(target_os = "windows")]
+            "./proxy.exe",
+            #[cfg(not(target_os = "windows"))]
+            "./proxy",
+        )
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .env("SERVER", server)
+        .env(
+            "MODERN",
+            match socketio_version {
+                SocketIo::Two => "",
+                SocketIo::Four => "1",
+            },
+        )
+        .spawn()
+        .expect("cannot spawn proxy");
 
         let stdin = proxy.stdin.take().expect("no stdin");
         let stdout = proxy.stdout.take().expect("no stdout");

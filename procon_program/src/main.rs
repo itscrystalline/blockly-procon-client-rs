@@ -36,12 +36,12 @@ fn main() {
         ChaserGame::join_url(
             server,
             name.unwrap_or("crystal".to_string()),
-            room.unwrap_or("Practice1".to_string()),
+            room.unwrap_or("Tornament2".to_string()),
         )
     } else {
         ChaserGame::join(
             name.unwrap_or("crystal".to_string()),
-            room.unwrap_or("Practice1".to_string()),
+            room.unwrap_or("Tornament2".to_string()),
         )
     };
     // handle.send(C2SPacket::MovePlayer(Direction::Left));

@@ -11,7 +11,7 @@ use chaser::{
 use pathfinding::prelude::astar;
 
 const CHARGE: u32 = 50;
-const OPP_RANGE: usize = 5;
+const OPP_RANGE: usize = 3;
 
 type Point = (usize, usize);
 
